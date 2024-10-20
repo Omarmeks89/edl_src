@@ -1,0 +1,114 @@
+EBNF для транслятора EDL (equipment description language)
+
+v0.0.1a-1
+====================================== глобальные символы ======================================
+translate   : (object | var_decl | template | connection | signal)* EOF
+
+object      : obj_class obj_type name obj_scope SEMICOLON
+obj_scope   : FP_OP (object | var_decl | signal | directive | obj_param | connection)* FP_CL
+obj_param   : ID COLON type_spec ASSIGN (var_extract | range | value) (obj_opt)* SEMICOLON
+obj_opt     : ...
+obj_class   : оборудование
+obj_type    : АНАЛОГ | ЦИФРА
+
+template    : template_kw ID templ_scope SEMICOLON
+templ_scope : FP_OP (object | context | var_decl | directive | parameter | connection | signal)* FP_CL
+template_kw : шаблон
+
+context     : ctx_kw ID ctx_scope SEMICOLON
+ctx_scope   : FP_OP (var_decl)* FP_CL
+ctx_kw      : контекст
+
+connection  : conn_kw name conn_scope SEMICOLON
+conn_scope  : FP_OP (conn_par | var_decl | directive)* FP_CL
+conn_par    : ID COLON type_spec ASSIGN (var_extract | range | value) (conn_opt)* SEMICOLON
+conn_opt    : opt_name (ASSIGN (value | var_extract))*
+opt_name    : ОБРАБОТЧИК
+conn_kw     : соединение
+
+signal      : sign_kw s_direct sign_type name sign_scope SEMICOLON
+sign_scope  : FP_OP (var_decl | sign_par | directive | connection)* FP_CL
+sign_par    : ID COLON type_spec ASSIGN (var_extract | range | value) (s_option)* SEMICOLON
+s_option    : sig_opt (ASSIGN (value | var_extract | s_const))*
+sig_opt     : СТАТУС | ВАЖНОСТЬ | ОТОБРАЖАТЬ | МЕТКА
+sign_kw     : сигнал
+s_const     : НОРМА | АВАРИЯ
+s_direct    : ВХОДНОЙ | ВЫХОДНОЙ
+sign_type   : АНАЛОГ | ДИСКРЕТ
+
+directive   : POINT dir_kind SEMICOLON
+dir_kind    : use | put | bind
+use         : use_kw ID use_method vals_kw filter
+filter      : all | exclude
+exclude     : excl_kw value | var_extract
+use_kw      : использовать
+use_method  : ЛИНЕЙНО
+vals_kw     : ЗНАЧЕНИЯ
+excl_kw     : КРОМЕ
+all         : ВСЕ
+
+bind        : POINT bind_kw (comp_name | ID)  SEMICOLON
+comp_name   : RP_OP name RP_CL
+bind_kw     : привязать
+q
+put         : put_kw in ID from var_extract rule?
+rule        : rule_kw rule_expr // | var_extract
+rule_expr   : SP_OP idx HYPHEN idx SP_CL junc SP_OP IT SP_CL
+put_kw      : подстановка
+rule_kw     : ПРАВИЛО
+in          : в
+from        : из
+idx         : numeric_value
+junc        : <-
+IT          : i
+
+// диапазон[~, 2]
+range       : range_kw SP_OP (TILDA | INT | var_extract) COMMA (TILDA | INT | var_extract) SP_CL
+range_kw    : диапазон
+
+var_decl    : VAR_SYMB ID (VAR_SYMB COMMA ID)* COLON type_spec (ASSIGN (value | var_extract | dyn_name))? SEMICOLON
+dyn_name    : RP_OP ID (CONCAT var_extract)* RB_CL
+name        : ID (CONCAT var_extract)*
+var_extract : VAR_SYMB ID  // Token("name", TokenType.ID) -> is a symbol
+type_spec   : INT | FLOAT | STR | BOOL | array_spec
+value       : text_value | numeric_value | bool_value | array
+text_value  : STR
+numeric_value : [0-9\-] | [0-9\.\-] / int | float /
+bool_value  : BOOL
+
+numeric     : (MINUS | PLUS)? int | float
+int         : [0-9]
+float       : [0-9\.]
+
+// [int, str, [int, str, [bool..]]]
+// [int:7]
+// [[int:7]..] | [[int:7]:6]
+// [int..] -> any count of integers maybe 0
+// any symbol (exclude SP_CL) after ellipsis is a syntax error
+array_spec  : arr_kw SP_OP (type_spec arr_size? (COMMA type_spec arr_size?)*)) type_spec ( arr_size | ellipsis) SP_CL
+arr_size    : COLON INT
+arr_kw      : ARR
+ellipsis    : ".."
+
+// ["data"] | ["data", ["data"], []]
+array       : SP_OP (arr_item | arr_items) SP_CL
+arr_items   : (arr_item COMMA)*
+arr_item    : value | var_extract
+
+ID          : text
+EOF         : "\n"
+VAR_SYMB    : "$"
+SEMICOLON   : ";"
+POINT       : "."
+COLON       : ":"
+COMMA       : ","
+CONCAT      : "+"
+HYPHEN      : "-"
+ASSIGN      : "="
+TILDA       : "~"
+FP_OP       : "{"
+FP_CL       : "}"
+SP_OP       : "["
+SP_CL       : "]"
+RP_OP       : "("
+RP_CL       : ")"
