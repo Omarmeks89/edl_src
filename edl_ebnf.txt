@@ -53,7 +53,7 @@ bind_kw     : привязать
 q
 put         : put_kw in ID from var_extract rule?
 rule        : rule_kw rule_expr // | var_extract
-rule_expr   : SP_OP idx HYPHEN idx SP_CL junc SP_OP IT SP_CL
+rule_expr   : SP_OP idx COLON idx SP_CL junc SP_OP IT SP_CL
 put_kw      : подстановка
 rule_kw     : ПРАВИЛО
 in          : в
@@ -71,12 +71,11 @@ dyn_name    : RP_OP ID (CONCAT var_extract)* RB_CL
 name        : ID (CONCAT var_extract)*
 var_extract : VAR_SYMB ID  // Token("name", TokenType.ID) -> is a symbol
 type_spec   : INT | FLOAT | STR | BOOL | array_spec
-value       : text_value | numeric_value | bool_value | array
+value       : text_value | numeric | bool_value | array
 text_value  : STR
-numeric_value : [0-9\-] | [0-9\.\-] / int | float /
 bool_value  : BOOL
 
-numeric     : (MINUS | PLUS)? int | float
+numeric     : MINUS? int | float
 int         : [0-9]
 float       : [0-9\.]
 
@@ -103,7 +102,7 @@ POINT       : "."
 COLON       : ":"
 COMMA       : ","
 CONCAT      : "+"
-HYPHEN      : "-"
+MINUS       : "-"
 ASSIGN      : "="
 TILDA       : "~"
 FP_OP       : "{"

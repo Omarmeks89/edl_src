@@ -383,7 +383,7 @@ class AdtBuilder:
             declared.set_value(value)
 
     def value(self, value: Value) -> None:
-        """handling value"""
+        """handling value. Set unary (if unary)"""
         pass
 
     def array_value(self, arr: ArrayValue) -> None:

@@ -64,7 +64,11 @@ class VarSymbol(Symbol):
     def value(self) -> Any | None:
         if self._value is None:
             return self._value
-        return self._value.value
+
+        value = self._value.value
+        if self._value.negative:
+            value = -value
+        return value
 
     def set_value(self, value: Value) -> None:
         self._value = value

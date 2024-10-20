@@ -17,7 +17,6 @@ class TranslatorToken(str, Enum):
     COLON: str = ":"
     COMMA: str = ","
     CONCAT: str = "+"
-    HYPHEN: str = "-"
     ASSIGN: str = "ASSIGN"
     FP_OP: str = "FP_OP"
     FP_CL: str = "FP_CL"

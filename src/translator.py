@@ -200,9 +200,8 @@ class Tokenizer:
                 yield Token("+", TranslatorToken.CONCAT)
 
             elif self._code[self._pos] == "-":
-                # is next symbol digit? (make unaryOp)
                 self._pos += 1
-                yield Token("-", TranslatorToken.HYPHEN)
+                yield Token("-", TranslatorToken.MINUS)
 
             elif self._code[self._pos] == "=":
                 self._pos += 1
@@ -806,15 +805,16 @@ class Parser:
         return options
 
     def value(self) -> AstNode:
-        token = self._curr_token
-        # if self._curr_token.token_type == "":
-        #     self.eat("unary")
-        #     ...
-        if self._curr_token.token_type == TranslatorToken.INT:
-            self.eat(TranslatorToken.INT)
+        """value        : text_value | numeric | bool_value | array
+           numeric      : MINUS? INT | FLOAT
+           text_value   : STR
+           bool_value   : BOOL
+           MINUS        : "-"
+        """
 
-        elif self._curr_token.token_type == TranslatorToken.FLOAT:
-            self.eat(TranslatorToken.FLOAT)
+        token = self._curr_token
+        if self._curr_token.token_type in (TranslatorToken.MINUS, TranslatorToken.INT, TranslatorToken.FLOAT):
+            return self.numeric()
 
         elif self._curr_token.token_type == TranslatorToken.STR:
             self.eat(TranslatorToken.STR)
@@ -826,6 +826,22 @@ class Parser:
             return self.array()
 
         return Value(token)
+
+    def numeric(self) -> AstNode:
+        token = self._curr_token
+        minus: Optional[Token] = None
+        if self._curr_token.token_type == TranslatorToken.MINUS:
+            minus = token
+            self.eat(TranslatorToken.MINUS)
+            token = self._curr_token
+
+        if self._curr_token.token_type == TranslatorToken.INT:
+            self.eat(TranslatorToken.INT)
+
+        elif self._curr_token.token_type == TranslatorToken.FLOAT:
+            self.eat(TranslatorToken.FLOAT)
+
+        return Value(token, unary_token=minus)
 
     def array(self) -> AstNode:
         self.eat(TranslatorToken.SP_OP)
@@ -941,7 +957,7 @@ class Parser:
         self.eat(TranslatorToken.SP_OP)
         _fr = self._curr_token
         self.eat(TranslatorToken.INT)
-        self.eat(TranslatorToken.HYPHEN)
+        self.eat(TranslatorToken.COLON)
         _to = self._curr_token
         self.eat(TranslatorToken.INT)
         self.eat(TranslatorToken.SP_CL)

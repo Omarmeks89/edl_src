@@ -437,8 +437,9 @@ class Object(Block):
 
 class Value(AstNode):
 
-    def __init__(self, token: Token) -> None:
+    def __init__(self, token: Token, *, unary_token: Optional[Token] = None) -> None:
         self._token = token
+        self._unary = unary_token
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(val={self._token.value}, type={self._token.token_type})"
@@ -450,6 +451,10 @@ class Value(AstNode):
     @property
     def node_type(self) -> TranslatorToken:
         return self._token.token_type
+
+    @property
+    def negative(self) -> bool:
+        return self._unary is not None
 
     def visit(self, visitor: Any) -> Any:
         visitor.value(self)
@@ -471,6 +476,10 @@ class ArrayValue(AstNode):
     @property
     def node_type(self) -> TranslatorToken:
         return self._type
+
+    @property
+    def negative(self) -> bool:
+        return False
 
     def visit(self, visitor: Any) -> Any:
         visitor.array_value(self)
