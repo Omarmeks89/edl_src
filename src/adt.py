@@ -659,8 +659,8 @@ class AbstractDataTable:
 
     def declare(self, sym_name: str, symbol: Symbol) -> None:
         """declare -> for variables"""
-        if sym_name is self._symbols:
-            raise TranslatorRuntimeError(f"attempt to redefine symbol '{sym_name}'")
+        if sym_name in self._symbols:
+            raise TranslatorRuntimeError(f"attempt to redefine symbol '{sym_name}' in scope '{self._name}'")
         self._symbols[sym_name] = symbol
 
     @abstractmethod
@@ -668,12 +668,14 @@ class AbstractDataTable:
         """declare parameter and check that param is allowed for scope"""
         pass
 
-    def lookup(self, sym_name: str) -> Symbol | None:
+    def lookup(self, sym_name: str, *, only_curr: bool = False) -> Symbol | None:
         """lookup for VARIABLE
         If value is returned, symbol is declared
+        only_curr - lookup only in current scope.
         """
         symbol = self._symbols.get(sym_name)
         if symbol is None and self._enclosed_scope is not None:
+            # we dont found in current scope, let`s check enclosed (if exists)
             return self._enclosed_scope.lookup(sym_name)
 
         return symbol
@@ -920,7 +922,7 @@ class ContextScope:
         var: VarSymbol
         var.set_value(val)
 
-    def lookup(self, sym_name: str) -> VarSymbol | None:
+    def lookup(self, sym_name: str, *, only_curr: bool = False) -> VarSymbol | None:
         """lookup for VARIABLE
         If value is returned, symbol is declared
         """
@@ -961,7 +963,7 @@ class TemplateScope(AbstractDataTable):
             return None
         return ctx.lookup(sym_name)
 
-    def lookup(self, sym_name: str) -> Symbol | None:
+    def lookup(self, sym_name: str, *, only_curr: bool = False) -> Symbol | None:
         """lookup for VARIABLE
         If value is returned, symbol is declared
         """

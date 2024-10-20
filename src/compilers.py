@@ -369,7 +369,7 @@ class AdtBuilder:
         decl.visit(self)
         for v in decl.get_vars():
             # TODO add lookup only for current scope
-            declared = self._curr_scope.lookup(v.name)
+            declared = self._curr_scope.lookup(v.name, only_curr=True)
             if declared is None:
                 raise TranslatorRuntimeError(f"variable {v.name} not found")
 
