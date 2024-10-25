@@ -223,6 +223,7 @@ class AdtBuilder:
         self._curr_scope = enclosed_scope
 
     def connection(self, c: Connection) -> None:
+        # TODO add full name for valid object registration
         enclosed_scope = self._curr_scope
         conn = self._scopes.get(c.name)
         if conn is None:
@@ -240,6 +241,8 @@ class AdtBuilder:
                     )
 
             conn.set_name_extensions(n_ext)
+
+            # TODO register by full name
             self._curr_scope.declare(conn.name, conn)
             self._scopes[c.name] = conn
             self._curr_scope = conn
@@ -443,7 +446,11 @@ class AdtBuilder:
         pass
 
     def bind_directive(self, bd: BindDirective) -> None:
-        bounded_obj = self._curr_scope.lookup(bd.get_base_name())
+        """bind to connection DataTable"""
+
+        # TODO: it should be registered into scope by full name
+        # (with name extensions if exists)
+        bounded_obj: ConnectionTable = self._curr_scope.lookup(bd.get_base_name())
         if bounded_obj is None:
             raise TranslatorRuntimeError(f"symbol '{bd.get_base_name()}' not resolved")
 
