@@ -471,9 +471,6 @@ class ConnectionParamsSymbol(ParamSymbol):
                 f"option '{opt.name}' should be registered once"
             )
 
-        # if self._name == "Адрес" and opt.name == "обработчик":
-        #     opt = ConnectionDriverOption(opt.name, opt.value)
-
         self._registered.add(opt.name)
         self._options.append(opt)
 
@@ -609,6 +606,7 @@ class AbstractDataTable:
         self._symbols: Mapping[str, Symbol] = {}
         self._params: Mapping[str, list[Symbol]] = {}
         self._binded: Optional[AbstractDataTable] = None
+        self._ctx: Optional["ContextScope"] = None
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._name}, {self._scope_type}, {type(self._enclosed_scope)}, symbs={self._symbols}, params={self._params})"
@@ -674,6 +672,9 @@ class AbstractDataTable:
         only_curr - lookup only in current scope.
         """
         symbol = self._symbols.get(sym_name)
+        if only_curr:
+            return symbol
+
         if symbol is None and self._enclosed_scope is not None:
             # we dont found in current scope, let`s check enclosed (if exists)
             return self._enclosed_scope.lookup(sym_name)
@@ -697,6 +698,13 @@ class AbstractDataTable:
 
         if self._enclosed_scope is not None:
             return self._enclosed_scope.lookup_context(ctx_name)
+
+    def context_found(self) -> bool:
+        if self._ctx is not None:
+            return True
+
+        if self._enclosed_scope is not None:
+            return self._enclosed_scope.context_found()
 
     @abstractmethod
     def visit(self, visitor: Any) -> None:
@@ -928,6 +936,9 @@ class ContextScope:
         """
         return self._symbols.get(sym_name)
 
+    def context_found(self) -> bool:
+        return True
+
     def visit(self, visitor: Any) -> None:
         visitor.context_table(self)
 
@@ -968,10 +979,6 @@ class TemplateScope(AbstractDataTable):
         If value is returned, symbol is declared
         """
         # lookup in context first
-        ctx = self._contexts.get(sym_name)
-        if ctx is not None:
-            return ctx
-
         for v in self._contexts.values():
             symbol = v.lookup(sym_name)
             if symbol is not None:
@@ -979,6 +986,9 @@ class TemplateScope(AbstractDataTable):
 
         # goto current scope if nothing in context
         symbol = self._symbols.get(sym_name)
+        if only_curr:
+            return symbol
+
         if symbol is None and self._enclosed_scope is not None:
             # goto enclosed scope
             return self._enclosed_scope.lookup(sym_name)
@@ -989,6 +999,11 @@ class TemplateScope(AbstractDataTable):
         if ctx_name in self._contexts:
             return self._contexts.get(ctx_name)
         return None
+
+    def context_found(self) -> bool:
+        if self._contexts:
+            return True
+        return False
 
     def visit(self, visitor: Any) -> None:
         visitor.template_scope(self)

@@ -7,8 +7,6 @@
 берет из него данные.
 """
 
-import copy
-import random
 from typing import Mapping, Any, Optional, Generator
 
 from src.adt import (
@@ -66,6 +64,7 @@ from src.exceptions import (
 )
 from src.tokens import TranslatorToken
 from src.translator import Parser
+from translators.scada_translator import ScadaJsonTranslator
 
 
 class AdtBuilder:
@@ -83,7 +82,7 @@ class AdtBuilder:
 
         self._type_matcher = TypeMatcher()
 
-    def run(self, translator: "ScadaJsonTranslator") -> "ScadaJsonTranslator":
+    def run(self, translator: ScadaJsonTranslator) -> ScadaJsonTranslator:
         # ADT building stage
         module = self._parser.translate()
         module.visit(self)
@@ -180,7 +179,7 @@ class AdtBuilder:
         eq_scope = self._scopes.get(o.name)
         if eq_scope is None:
             eq_scope = EquipmentTable(
-                o.name, o.node_type, o.obj_type, enclosed_scope=enclosed_scope
+                o.name, o.node_type, o.obj_type, enclosed_scope=enclosed_scope,
             )
             n_ext = o.get_name_extensions()
             for n in n_ext:
@@ -327,13 +326,9 @@ class AdtBuilder:
             elif p.name == "Единицы":
                 sig_par = SignalUnits(p.name, _type=pd.get_param_type())
 
-            # self._curr_scope.declare_parameter(sig_par.name, sig_par)
-
         elif self._curr_scope.scope_type == TranslatorToken.CONNECTION:
             if p.name == "Идентификатор":
                 sig_par = ConnectionId(p.name, _type=pd.get_param_type())
-
-            # self._curr_scope.declare_parameter(sig_par.name, sig_par)
 
             elif p.name == "Адрес":
                 sig_par = ConnectionAddress(p.name, _type=pd.get_param_type())
@@ -344,7 +339,12 @@ class AdtBuilder:
         self._curr_scope.declare_parameter(sig_par.name, sig_par)
 
     def var(self, v: Var) -> None:
-        if not self._curr_scope.lookup(v.name):
+        print("lookup var")
+        # use_curr_scope: bool = True
+        # if self._curr_scope.context_found():
+        #     use_curr_scope = False
+
+        if not self._curr_scope.lookup(v.name, only_curr=False):
             raise TranslatorRuntimeError(f"variable '{v.name}' not declared")
 
     def var_assign(self, va: VarAssign) -> None:
@@ -361,7 +361,7 @@ class AdtBuilder:
         decl.visit(self)
         for v in decl.get_vars():
             # TODO add lookup only for current scope
-            declared = self._curr_scope.lookup(v.name, only_curr=True)
+            declared = self._curr_scope.lookup(v.name, only_curr=False)
             if declared is None:
                 raise TranslatorRuntimeError(f"variable {v.name} not found")
 
@@ -521,15 +521,6 @@ class TypeMatcher:
     def match_array(self, symb: Symbol, value: AstNode) -> bool:
         """fake implementation"""
         return True
-
-
-class KeyGen:
-    """generate random key for linking scada files"""
-
-    @classmethod
-    def key(cls) -> str:
-        symbols = "qazwscxedrfvtgbyhnujmikikolp0987654321_-"
-        return "".join([random.choice(symbols) for _ in range(len(symbols) // 2)])
 
 
 class ContextResolver:
