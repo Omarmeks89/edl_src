@@ -62,17 +62,17 @@ def edl(file: str, e: bool, output_path: str) -> None:
     compiler = AdtBuilder(parser)
 
     # choose translator
-    scada_fmt_translator = TranslationFinalizer()
+    finalizer = TranslationFinalizer()
     try:
-        compiler.run(scada_fmt_translator)
+        compiler.run(finalizer)
     except (TranslatorError, OSError) as err:
         os.write(2, f"compilation error:\n{err}\n".encode("utf-8"))
         exit(1)
 
-    scada_fmt_translator.write_alarms(path=output_path)
-    scada_fmt_translator.write_connections(path=output_path)
-    scada_fmt_translator.write_alarms_formats(path=output_path)
-    scada_fmt_translator.write_values_aliases(path=output_path)
+    finalizer.write_signals(path=output_path)
+    finalizer.write_conn_src(path=output_path)
+    finalizer.write_signals_format(path=output_path)
+    finalizer.write_aliases(path=output_path)
 
 
 if __name__ == "__main__":
