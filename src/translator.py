@@ -53,45 +53,45 @@ class Tokenizer:
     """
 
     _reserved_keywords: Mapping[str, Token] = {
-        "оборудование": Token("оборудование", TranslatorToken.OBJ_CLASS),
-        "класс_а": Token("аналог", TranslatorToken.OBJ_TYPE),
-        "класс_ц": Token("цифра", TranslatorToken.OBJ_TYPE),
-        "шаблон": Token("шаблон", TranslatorToken.TEMPL_KW),
-        "контекст": Token("контекст", TranslatorToken.CTX_KW),
-        "соединение": Token("соединение", TranslatorToken.CONN_KW),
-        "обработчик": Token("обработчик", TranslatorToken.CONN_OPT),
-        "сигнал": Token("сигнал", TranslatorToken.SIGN_KW),
-        # add sign opt
-        "статус": Token("статус", TranslatorToken.SIGN_OPT),
-        "важность": Token("важность", TranslatorToken.SIGN_OPT),
-        "отображать": Token("отображать", TranslatorToken.SIGN_OPT),
-        "метка": Token("метка", TranslatorToken.SIGN_OPT),
-        "входной": Token("входной", TranslatorToken.SIGN_DIRECT),
-        "выходной": Token("выходной", TranslatorToken.SIGN_DIRECT),
-        "аналог": Token("аналог", TranslatorToken.SIGN_TYPE),
-        "дискрет": Token("дискрет", TranslatorToken.SIGN_TYPE),
-        "использовать": Token("использовать", TranslatorToken.USE_KW),
-        "линейно": Token("линейно", TranslatorToken.USE_METHOD),
-        "значения": Token("значения", TranslatorToken.VALS_KW),
-        "кроме": Token("кроме", TranslatorToken.EXCL_KV),
-        "все": Token("все", TranslatorToken.ALL),
-        "подстановка": Token("подстановка", TranslatorToken.PUT_KW),
-        "правило": Token("правило", TranslatorToken.RULE_KW),
-        "в": Token("в", TranslatorToken.IN),
-        "из": Token("из", TranslatorToken.FROM),
-        "str": Token("str", TranslatorToken.STR_CONST),
-        "int": Token("int", TranslatorToken.INT_CONST),
-        "float": Token("float", TranslatorToken.FLOAT_CONST),
-        "bool": Token("bool", TranslatorToken.BOOL_CONST),
-        "arr": Token("ARR", TranslatorToken.ARRAY_CONST),
-        "Да": Token("Да", TranslatorToken.BOOL),
-        "Нет": Token("Нет", TranslatorToken.BOOL),
-        "диапазон": Token("диапазон", TranslatorToken.RANGE_KW),
-        "i": Token("<i>", TranslatorToken.IT),
-        "норма": Token("норма", TranslatorToken.S_CONST),
-        "авария": Token("авария", TranslatorToken.S_CONST),
-        "тревога": Token("тревога", TranslatorToken.S_CONST),
-        "привязать": Token("привязать", TranslatorToken.BIND_KW),
+            "оборудование": Token("оборудование", TranslatorToken.OBJ_CLASS),
+            "класс_а":      Token("аналог", TranslatorToken.OBJ_TYPE),
+            "класс_ц":      Token("цифра", TranslatorToken.OBJ_TYPE),
+            "шаблон":       Token("шаблон", TranslatorToken.TEMPL_KW),
+            "контекст":     Token("контекст", TranslatorToken.CTX_KW),
+            "соединение":   Token("соединение", TranslatorToken.CONN_KW),
+            "обработчик":   Token("обработчик", TranslatorToken.CONN_OPT),
+            "сигнал":       Token("сигнал", TranslatorToken.SIGN_KW),
+            # add sign opt
+            "статус":       Token("статус", TranslatorToken.SIGN_OPT),
+            "важность":     Token("важность", TranslatorToken.SIGN_OPT),
+            "отображать":   Token("отображать", TranslatorToken.SIGN_OPT),
+            "метка":        Token("метка", TranslatorToken.SIGN_OPT),
+            "входной":      Token("входной", TranslatorToken.SIGN_DIRECT),
+            "выходной":     Token("выходной", TranslatorToken.SIGN_DIRECT),
+            "аналог":       Token("аналог", TranslatorToken.SIGN_TYPE),
+            "дискрет":      Token("дискрет", TranslatorToken.SIGN_TYPE),
+            "использовать": Token("использовать", TranslatorToken.USE_KW),
+            "линейно":      Token("линейно", TranslatorToken.USE_METHOD),
+            "значения":     Token("значения", TranslatorToken.VALS_KW),
+            "кроме":        Token("кроме", TranslatorToken.EXCL_KV),
+            "все":          Token("все", TranslatorToken.ALL),
+            "подстановка":  Token("подстановка", TranslatorToken.PUT_KW),
+            "правило":      Token("правило", TranslatorToken.RULE_KW),
+            "в":            Token("в", TranslatorToken.IN),
+            "из":           Token("из", TranslatorToken.FROM),
+            "str":          Token("str", TranslatorToken.STR_CONST),
+            "int":          Token("int", TranslatorToken.INT_CONST),
+            "float":        Token("float", TranslatorToken.FLOAT_CONST),
+            "bool":         Token("bool", TranslatorToken.BOOL_CONST),
+            "arr":          Token("ARR", TranslatorToken.ARRAY_CONST),
+            "Да":           Token("Да", TranslatorToken.BOOL),
+            "Нет":          Token("Нет", TranslatorToken.BOOL),
+            "диапазон":     Token("диапазон", TranslatorToken.RANGE_KW),
+            "i":            Token("<i>", TranslatorToken.IT),
+            "норма":        Token("норма", TranslatorToken.S_CONST),
+            "авария":       Token("авария", TranslatorToken.S_CONST),
+            "тревога":      Token("тревога", TranslatorToken.S_CONST),
+            "привязать":    Token("привязать", TranslatorToken.BIND_KW),
     }
 
     def __init__(self) -> None:
@@ -115,9 +115,9 @@ class Tokenizer:
         code_ptr = "".join(symbols)
         code = self._code
         return (
-            f"{code[:-1]}\n{code_ptr}\n(pos=<{self._pos}>, "
-            f"symbol=<{self._code[self._pos]!r}>, "
-            f"line=<{self._line_pos}>)"
+                f"{code[:-1]}\n{code_ptr}\n(pos=<{self._pos}>, "
+                f"symbol=<{self._code[self._pos]!r}>, "
+                f"line=<{self._line_pos}>)"
         )
 
     def _set_new_line(self):
@@ -235,7 +235,9 @@ class Tokenizer:
                 if self.is_junc():
                     yield Token("<-", TranslatorToken.JUNC)
                 else:
-                    self.error(msg=f"unexpected symbol.\ntrace:\n{self.get_trace()}")
+                    self.error(
+                        msg=f"unexpected symbol.\ntrace:\n{self.get_trace()}"
+                        )
 
             elif self._code[self._pos].isalpha():
                 # ID
@@ -254,12 +256,15 @@ class Tokenizer:
                 yield self.match_literal(self._code, self._code[self._pos])
 
             else:
-                self.error(msg=f"unexpected symbol.\ntrace:\n{self.get_trace()}")
+                self.error(
+                    msg=f"unexpected symbol.\ntrace:\n{self.get_trace()}"
+                    )
 
         yield Token("EOF", TranslatorToken.EOF)
 
     def is_junc(self) -> bool:
-        if (self._pos + 1) < len(self._code) and self._code[self._pos + 1] == "-":
+        if (self._pos + 1) < len(self._code) and self._code[
+            self._pos + 1] == "-":
             self._pos += 2
             return True
         return False
@@ -273,15 +278,15 @@ class Tokenizer:
         return None, False
 
     def _match_array(
-        self,
-        code: str,
-        *,
-        depth: Optional[int] = None,
+            self,
+            code: str,
+            *,
+            depth: Optional[int] = None,
     ) -> bool:
         _d = depth
         if _d is not None and _d > TYPE_MATCHING_LIMIT:
             self.error(
-                msg=f"type matching depth limit {_d}.\ntrace:\n{self.get_trace()}"
+                    msg=f"type matching depth limit {_d}.\ntrace:\n{self.get_trace()}"
             )
 
         if _d is None:
@@ -305,7 +310,7 @@ class Tokenizer:
 
             elif code[self._pos] == "." and ellipsis_possible:
                 if code[self._pos - 1] not in (" ", ",") and self.is_ellipsis(
-                    code, self._pos
+                        code, self._pos
                 ):
                     # comma is impossible if we found ellipsis
                     comma_possible = False
@@ -321,7 +326,7 @@ class Tokenizer:
                 try:
                     st = self._pos
                     self._skip_int(self._code)
-                    int(code[st : self._pos])
+                    int(code[st: self._pos])
                     comma_possible = False
                 except TypeError:
                     is_array = False
@@ -344,10 +349,10 @@ class Tokenizer:
         if token is None:
             return False
         return token.token_type in (
-            TranslatorToken.INT_CONST,
-            TranslatorToken.FLOAT_CONST,
-            TranslatorToken.BOOL_CONST,
-            TranslatorToken.STR_CONST,
+                TranslatorToken.INT_CONST,
+                TranslatorToken.FLOAT_CONST,
+                TranslatorToken.BOOL_CONST,
+                TranslatorToken.STR_CONST,
         )
 
     def match_symbol(self, code: str) -> Token:
@@ -355,9 +360,9 @@ class Tokenizer:
         symbols: list[str] = []
         while self._pos < len(code):
             if (
-                code[self._pos].isalpha()
-                or code[self._pos].isdigit()
-                or code[self._pos] == "_"
+                    code[self._pos].isalpha()
+                    or code[self._pos].isdigit()
+                    or code[self._pos] == "_"
             ):
                 symbols.append(code[self._pos])
                 self._pos += 1
@@ -381,8 +386,8 @@ class Tokenizer:
             while self._pos < len(code) and code[self._pos].isdigit():
                 self._pos += 1
 
-            return Token(float(code[pos : self._pos]), TranslatorToken.FLOAT)
-        return Token(int(code[pos : self._pos]), TranslatorToken.INT)
+            return Token(float(code[pos: self._pos]), TranslatorToken.FLOAT)
+        return Token(int(code[pos: self._pos]), TranslatorToken.INT)
 
     def _skip_int(self, code: str) -> None:
         while self._pos < len(code) and code[self._pos].isdigit():
@@ -391,7 +396,7 @@ class Tokenizer:
     def match_literal(self, code: str, to: str) -> Token:
         st = self._pos
         self._skip(to)
-        string = code[st + 1 : self._pos - 1]  # skip brackets
+        string = code[st + 1: self._pos - 1]  # skip brackets
         return Token(string, TranslatorToken.STR)
 
     @staticmethod
@@ -813,7 +818,8 @@ class Parser:
         """
 
         token = self._curr_token
-        if self._curr_token.token_type in (TranslatorToken.MINUS, TranslatorToken.INT, TranslatorToken.FLOAT):
+        if self._curr_token.token_type in (
+        TranslatorToken.MINUS, TranslatorToken.INT, TranslatorToken.FLOAT):
             return self.numeric()
 
         elif self._curr_token.token_type == TranslatorToken.STR:
@@ -933,12 +939,12 @@ class Parser:
         vals_kw = self.vals_kw()
         filter = self.filter()
         use_directive = UseDirective(
-            name.value,
-            name,
-            dest,
-            meth,
-            vals_kw,
-            filter,
+                name.value,
+                name,
+                dest,
+                meth,
+                vals_kw,
+                filter,
         )
         return use_directive
 
@@ -1130,7 +1136,9 @@ class Parser:
         elif self._curr_token.token_type == TranslatorToken.ARRAY_CONST:
             is_arr, spec = self.array_spec()
             if not is_arr:
-                self.error(msg=f"Syntax error/\ntrace:\n{self._tokenizer.get_trace()}")
+                self.error(
+                    msg=f"Syntax error/\ntrace:\n{self._tokenizer.get_trace()}"
+                    )
             return spec
 
         return _T(token)

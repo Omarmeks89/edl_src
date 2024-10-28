@@ -64,7 +64,7 @@ from src.exceptions import (
 )
 from src.tokens import TranslatorToken
 from src.translator import Parser
-from translators.scada_translator import ScadaJsonTranslator
+from translators.finalizer import TranslationFinalizer
 
 
 class AdtBuilder:
@@ -82,7 +82,7 @@ class AdtBuilder:
 
         self._type_matcher = TypeMatcher()
 
-    def run(self, translator: ScadaJsonTranslator) -> ScadaJsonTranslator:
+    def run(self, translator: TranslationFinalizer) -> TranslationFinalizer:
         # ADT building stage
         module = self._parser.translate()
         module.visit(self)

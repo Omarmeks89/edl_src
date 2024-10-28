@@ -11,7 +11,7 @@ from src.translator import Tokenizer, Parser
 from src.preprocessor import make_processor, TextProcessor
 from src.compilers import AdtBuilder
 
-from translators.scada_translator import ScadaJsonTranslator
+from translators.finalizer import TranslationFinalizer
 
 
 @click.command()
@@ -62,7 +62,7 @@ def edl(file: str, e: bool, output_path: str) -> None:
     compiler = AdtBuilder(parser)
 
     # choose translator
-    scada_fmt_translator = ScadaJsonTranslator()
+    scada_fmt_translator = TranslationFinalizer()
     try:
         compiler.run(scada_fmt_translator)
     except (TranslatorError, OSError) as err:
