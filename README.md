@@ -139,7 +139,7 @@ python edl.py -e -f example_with_ctx.edl --output-path=old_bcp
 ```
 
 #### Компиляция (v0.0.1a-1)
-Скомпилирует файл в целевые файлы `nano-scada` в указанную директорию
+Скомпилирует файл в целевые файлы в указанную директорию
 ```bash
 python edl.py -f example_with_ctx.edl --output-path=old_bcp
 ```
