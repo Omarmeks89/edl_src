@@ -484,6 +484,12 @@ class AdtBuilder:
 
         # let`s set current context into current_scope
         # TODO:
+        ctx = self._curr_scope.lookup_context(dest.name)
+        if ctx is None:
+            return None
+
+        self._curr_scope.set_context(ctx)
+        print(f"use directive set ctx {ctx.name} for score {self._curr_scope.name}")
 
     def range(self, r: Range) -> None:
         pass

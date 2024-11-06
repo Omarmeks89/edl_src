@@ -610,7 +610,10 @@ class AbstractDataTable:
         self._ctx: Optional["ContextScope"] = None
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}({self._name}, {self._scope_type}, {type(self._enclosed_scope)}, symbs={self._symbols}, params={self._params})"
+        return (f"{type(self).__name__}({self._name}, "
+                f"{self._scope_type}, {type(self._enclosed_scope)}, "
+                f"symbs={self._symbols}, params={self._params}, "
+                f"ctx={self._ctx})")
 
     @property
     def name(self) -> str:
@@ -679,6 +682,12 @@ class AbstractDataTable:
         only_curr - lookup only in current scope.
         """
         symbol = self._symbols.get(sym_name)
+        if symbol is None:
+            # if nothing in symbols let`s try to find in
+            # context and resolve name
+            if self._ctx is not None:
+                symbol = self._ctx.lookup(sym_name)
+
         if only_curr:
             return symbol
 
@@ -941,6 +950,7 @@ class ContextScope:
         """lookup for VARIABLE
         If value is returned, symbol is declared
         """
+        # print(f"WELCOME TO CTX: {self._name}: {self.__repr__()}")
         return self._symbols.get(sym_name)
 
     @staticmethod
@@ -986,14 +996,11 @@ class TemplateScope(AbstractDataTable):
         """lookup for VARIABLE
         If value is returned, symbol is declared
         """
-        # lookup in context first
-        for v in self._contexts.values():
-            symbol = v.lookup(sym_name)
-            if symbol is not None:
-                return symbol
-
-        # goto current scope if nothing in context
         symbol = self._symbols.get(sym_name)
+        if symbol is None:
+            for v in self._contexts.values():
+                symbol = v.lookup(sym_name)
+
         if only_curr:
             return symbol
 
@@ -1009,9 +1016,7 @@ class TemplateScope(AbstractDataTable):
         return None
 
     def context_found(self) -> bool:
-        if self._contexts:
-            return True
-        return False
+        return True if self._contexts else False
 
     def visit(self, visitor: Any) -> None:
         visitor.template_scope(self)
