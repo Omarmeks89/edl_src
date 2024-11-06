@@ -55,7 +55,7 @@ from src.ast import (
     Value,
     ArrayValue,
     AstNode,
-    BindDirective,
+    BindDirective, DynamicVarName,
 )
 from src.exceptions import (
     TranslatorTypeError,
@@ -219,6 +219,7 @@ class AdtBuilder:
         if conn is None:
             conn = ConnectionTable(c.name, c.node_type, enclosed_scope=enclosed_scope)
             n_ext = c.get_name_extensions()
+            r_symbols = []
             for n in n_ext:
                 resolving = self._curr_scope.lookup(n.name)
                 if resolving is None:
@@ -229,12 +230,15 @@ class AdtBuilder:
                     raise TranslatorRuntimeError(
                         f"name resolve from context (symbol '{resolving.name}') not allowed"
                     )
+                r_symbols.append(resolving.value)
 
+            # resolve name here
+            c_name = f"{conn.name}{''.join([f'{name}' for name in r_symbols])}"
             conn.set_name_extensions(n_ext)
 
             # TODO register by full name
-            self._curr_scope.declare(conn.name, conn)
-            self._scopes[c.name] = conn
+            self._curr_scope.declare(c_name, conn)
+            self._scopes[c_name] = conn
             self._curr_scope = conn
 
         for var in c.get_vars():
@@ -248,7 +252,8 @@ class AdtBuilder:
 
         self._curr_scope = enclosed_scope
 
-    def dynamic_name(self) -> None:
+    def dynamic_name(self, dn: DynamicVarName) -> None:
+        print(f"DYNAMIC VAR NAME: {dn=}")
         pass
 
     def signal(self, s: Signal) -> None:
@@ -263,15 +268,24 @@ class AdtBuilder:
                 enclosed_scope=enclosed_scope,
             )
             n_ext = s.get_name_extensions()
+            r_symbols = []
+            not_resolved = []
             for n in n_ext:
-                if self._curr_scope.lookup(n.name):
+                resolving = self._curr_scope.lookup(n.name)
+                if resolving is None:
+                    raise TranslatorRuntimeError(
+                        f"var '{n.name}' not found for dynamic name"
+                    )
+                if resolving.value is not None:
+                    r_symbols.append(resolving.value)
                     continue
-                raise TranslatorRuntimeError(
-                    f"var '{n.name}' not found for dynamic name"
-                )
 
-            signal_scope.set_name_extensions(n_ext)
-            self._scopes[s.name] = signal_scope
+                # context is not resolved at the moment
+                not_resolved.append(n)
+
+            sig_name = f"{s.name}{''.join([f'{name}' for name in r_symbols])}"
+            signal_scope.set_name_extensions(not_resolved)
+            self._scopes[sig_name] = signal_scope
             self._curr_scope = signal_scope
 
         for var in s.get_vars():
@@ -294,6 +308,10 @@ class AdtBuilder:
         # register all vars in current scope with type
         t = vd.get_var_type()
         for v in vd.get_vars():
+            # if var name declared raise error
+            # lookup all scopes
+            if self._curr_scope.lookup(v.name):
+                raise TranslatorRuntimeError(f"attempt to redefine registered var name '{v.name}'")
             var_symbol = VarSymbol(v.name, _type=t)
             self._curr_scope.declare(var_symbol.name, var_symbol)
 
@@ -343,7 +361,8 @@ class AdtBuilder:
             self._curr_scope.declare_parameter(sig_par.name, sig_par)
 
     def var(self, v: Var) -> None:
-        if not self._curr_scope.lookup(v.name, only_curr=False):
+        """lookup in current scope or context only"""
+        if not self._curr_scope.lookup(v.name):
             raise TranslatorRuntimeError(f"variable '{v.name}' not declared")
 
     def var_assign(self, va: VarAssign) -> None:
@@ -360,7 +379,7 @@ class AdtBuilder:
         decl.visit(self)
         for v in decl.get_vars():
             # TODO add lookup only for current scope
-            declared = self._curr_scope.lookup(v.name, only_curr=False)
+            declared = self._curr_scope.lookup(v.name, only_curr=True)
             if declared is None:
                 raise TranslatorRuntimeError(f"variable {v.name} not found")
 
@@ -416,7 +435,8 @@ class AdtBuilder:
 
                 # we`re expecting that values are resolved at the moment
                 else:
-                    par_value = node.value
+                    # par_value = node.value
+                    par_value = node
 
             if par.value is not None:
                 continue
@@ -438,18 +458,23 @@ class AdtBuilder:
 
         # TODO: it should be registered into scope by full name
         # (with name extensions if exists)
-        bounded_obj: ConnectionTable = self._curr_scope.lookup(bd.get_base_name())
-        if bounded_obj is None:
-            raise TranslatorRuntimeError(f"symbol '{bd.get_base_name()}' not resolved")
-
         names = bd.get_bounded()
+        name_parts = []
         if names is not None:
             for name in names:
                 declared = self._curr_scope.lookup(name.name)
                 if declared is not None:
+                    name_parts.append(declared.value)
                     continue
 
                 raise TranslatorRuntimeError(f"symbol '{name.name}' not resolved")
+
+        full_name = f"{bd.get_base_name()}{''.join([f'{n}' for n in name_parts])}"
+        bounded_obj: ConnectionTable = self._curr_scope.lookup(full_name)
+        if bounded_obj is None:
+            raise TranslatorRuntimeError(
+                f"object by full name {full_name} not resolved. DynamicNameError"
+                )
 
         if self._curr_scope.scope_type == TranslatorToken.SIGNAL:
             self._curr_scope.bind_to(bounded_obj)
@@ -482,14 +507,11 @@ class AdtBuilder:
             self._ctx_listeners[dest.name] = []
         self._ctx_listeners[dest.name].append(self._curr_scope)
 
-        # let`s set current context into current_scope
-        # TODO:
         ctx = self._curr_scope.lookup_context(dest.name)
         if ctx is None:
             return None
 
         self._curr_scope.set_context(ctx)
-        print(f"use directive set ctx {ctx.name} for score {self._curr_scope.name}")
 
     def range(self, r: Range) -> None:
         pass
