@@ -109,6 +109,7 @@ class Option:
     @abstractmethod
     def kind(self) -> TranslatorToken:
         """return kind of option"""
+        pass
 
     @abstractmethod
     def visit(self, visitor: Any) -> None:
@@ -632,6 +633,12 @@ class AbstractDataTable:
     def get_context(self) -> Optional["ContextScope"]:
         return self._ctx
 
+    def set_context(self, ctx: "ContextScope") -> None:
+        if self._ctx is None:
+            self._ctx = ctx
+            return
+        raise TranslatorRuntimeError(f"attempt to redefine context: {ctx.name}")
+
     def init_builtins(self) -> None:
         """init types: INT, STR, FLOAT, BOOL, ARRAY"""
         self.declare(
@@ -936,6 +943,7 @@ class ContextScope:
         """
         return self._symbols.get(sym_name)
 
+    @staticmethod
     def context_found(self) -> bool:
         return True
 

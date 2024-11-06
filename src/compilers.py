@@ -100,7 +100,9 @@ class AdtBuilder:
                     listener.visit(translator)
                     to_del.append(listener.name)
 
-            del self._ctx_listeners[ctx_name]
+            if ctx_name in self._ctx_listeners:
+                # current context is resolved
+                del self._ctx_listeners[ctx_name]
 
         for d in to_del:
             if d in self._scopes:
@@ -334,16 +336,13 @@ class AdtBuilder:
                 sig_par = ConnectionAddress(p.name, _type=pd.get_param_type())
 
         elif self._curr_scope.scope_type == TranslatorToken.OBJECT:
-            sig_par = EquipmentParamsSymbol(p.name, _type=pd.get_param_type())
+            if p.name == "Идентификатор":
+                sig_par = EquipmentParamsSymbol(p.name, _type=pd.get_param_type())
 
-        self._curr_scope.declare_parameter(sig_par.name, sig_par)
+        if sig_par is not None:
+            self._curr_scope.declare_parameter(sig_par.name, sig_par)
 
     def var(self, v: Var) -> None:
-        print("lookup var")
-        # use_curr_scope: bool = True
-        # if self._curr_scope.context_found():
-        #     use_curr_scope = False
-
         if not self._curr_scope.lookup(v.name, only_curr=False):
             raise TranslatorRuntimeError(f"variable '{v.name}' not declared")
 
@@ -482,6 +481,9 @@ class AdtBuilder:
         if listeners is None:
             self._ctx_listeners[dest.name] = []
         self._ctx_listeners[dest.name].append(self._curr_scope)
+
+        # let`s set current context into current_scope
+        # TODO:
 
     def range(self, r: Range) -> None:
         pass
