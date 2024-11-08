@@ -92,6 +92,7 @@ class Tokenizer:
             "авария":       Token("авария", TranslatorToken.S_CONST),
             "тревога":      Token("тревога", TranslatorToken.S_CONST),
             "привязать":    Token("привязать", TranslatorToken.BIND_KW),
+            "параметр": Token("параметр", TranslatorToken.SIGN_OPT),
     }
 
     def __init__(self) -> None:

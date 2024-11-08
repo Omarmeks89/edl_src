@@ -209,6 +209,7 @@ class SignalParamsSymbol(ParamSymbol):
     """base class for signal parameters"""
 
     _allowed_opt: TranslatorToken = TranslatorToken.SIGN_OPT
+    _multiple: set[str] = {"параметр",}
 
     def __init__(
         self,
@@ -228,7 +229,7 @@ class SignalParamsSymbol(ParamSymbol):
                 f"invalid option '{opt.name}' for signal parameter"
             )
 
-        if opt.name in self._registered:
+        if opt.name in self._registered and opt.name not in self._multiple:
             raise TranslatorRuntimeError(
                 f"option '{opt.name}' should be registered once"
             )
