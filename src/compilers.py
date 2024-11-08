@@ -84,14 +84,11 @@ class AdtBuilder:
 
     def run(self, translator: TranslationFinalizer) -> TranslationFinalizer:
         # ADT building stage
-        print("ENTER compiler")
         module = self._parser.translate()
-        print("got module")
         module.visit(self)
 
         # compilation stage (using ADT)
         to_del = []
-        print("RUN")
         for r in self._ctx_resolvers.values():
             ctx_name = r.get_ctx_name()
             for _ in r.get_resolver():
@@ -100,7 +97,6 @@ class AdtBuilder:
                     continue
 
                 for listener in listeners:
-                    print(f"resolve {listener=}")
                     listener.visit(translator)
                     to_del.append(listener.name)
 
@@ -387,6 +383,14 @@ class AdtBuilder:
             if declared is None:
                 raise TranslatorRuntimeError(f"variable {v.name} not found")
 
+            if value.node_type == TranslatorToken.ID:
+                # var name
+                _value = self._curr_scope.lookup(value.name)
+                if _value is None:
+                    raise TranslatorRuntimeError(f"{__name__}: symbol '{value.name}' not resolved")
+
+                value = _value
+
             declared: VarSymbol
             # check assigned value type
             if not self._type_matcher.type_match(declared, value):
@@ -567,7 +571,7 @@ class ContextResolver:
         self._matcher = TypeMatcher()
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}()"
+        return f"{type(self).__name__}(ctx={self._ctx}, keys={self._keys})"
 
     def get_ctx_name(self) -> str:
         return self._ctx.name

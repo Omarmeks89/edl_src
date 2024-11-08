@@ -922,7 +922,7 @@ class ContextScope:
         self._symbols: Mapping[str, VarSymbol] = {}
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(s={self._symbols})"
+        return f"{type(self).__name__}(name={self._name}, s={self._symbols})"
 
     @property
     def name(self) -> str:
@@ -950,7 +950,6 @@ class ContextScope:
         """lookup for VARIABLE
         If value is returned, symbol is declared
         """
-        # print(f"WELCOME TO CTX: {self._name}: {self.__repr__()}")
         return self._symbols.get(sym_name)
 
     @staticmethod

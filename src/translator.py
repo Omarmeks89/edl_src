@@ -440,27 +440,22 @@ class Parser:
         module: Module = Module(f"Module {self._reader.name}")
         while self._curr_token.token_type != TranslatorToken.EOF:
             if self._curr_token.token_type == TranslatorToken.OBJ_CLASS:
-                print("object")
                 node = self.object()
                 module.add_block(node)
 
             elif self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-                print("var")
                 node = self.var_decl()
                 module.add_variable(node)
 
             elif self._curr_token.token_type == TranslatorToken.TEMPL_KW:
-                print("template")
                 node = self.template()
                 module.add_block(node)
 
             elif self._curr_token.token_type == TranslatorToken.CONN_KW:
-                print("conn")
                 node = self.connection()
                 module.add_block(node)
 
             elif self._curr_token.token_type == TranslatorToken.SIGN_KW:
-                print("signal")
                 node = self.signal()
                 module.add_block(node)
 
@@ -572,7 +567,6 @@ class Parser:
         self.eat(TranslatorToken.VAR_SYMB)
         names: list[AstNode] = []
         while self._curr_token.token_type == TranslatorToken.ID:
-            print(self._curr_token)
             var = Var(self._curr_token)
             names.append(var)
             self.eat(TranslatorToken.ID)
@@ -606,7 +600,6 @@ class Parser:
             declaration = VarAssign(declaration, assign, val_src)
 
         self.eat(TranslatorToken.SEMICOLON)
-        print("exit_vardecl")
         return declaration
 
     def dyn_name(self) -> AstNode:
@@ -625,13 +618,11 @@ class Parser:
         self.eat(TranslatorToken.TEMPL_KW)
         templ_name = self._curr_token
         self.eat(TranslatorToken.ID)
-        print("try on scope")
         scope = self.templ_scope()
         self.eat(TranslatorToken.SEMICOLON)
         template = Template(templ_name.value)
         for node in scope:
             if node.node_type == TranslatorToken.CONTEXT:
-                print(f"add context: {node}")
                 template.add_context(node)
 
             elif node.node_type == TranslatorToken.DIRECTIVE:
@@ -660,7 +651,6 @@ class Parser:
                 nodes.append(node)
 
             elif self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-                print("var S")
                 node = self.var_decl()
                 nodes.append(node)
 
@@ -685,8 +675,6 @@ class Parser:
             elif self._curr_token.token_type == TranslatorToken.CTX_KW:
                 node = self.context()
                 nodes.append(node)
-
-            print(node)
 
         self.eat(TranslatorToken.FP_CL)
         return nodes
@@ -841,7 +829,6 @@ class Parser:
             self.eat(TranslatorToken.BOOL)
 
         elif self._curr_token.token_type == TranslatorToken.SP_OP:
-            print("array??")
             return self.array()
 
         return Value(token)
@@ -867,7 +854,6 @@ class Parser:
         arr_items: list[AstNode] = []
         while self._curr_token.token_type != TranslatorToken.SP_CL:
             arr_items.extend(self.arr_items())
-            print(arr_items)
 
         self.eat(TranslatorToken.SP_CL)
         return ArrayValue(arr_items)
@@ -881,14 +867,12 @@ class Parser:
             items.append(self.value())
 
         while self._curr_token.token_type == TranslatorToken.COMMA:
-            print(self._curr_token)
             self.eat(TranslatorToken.COMMA)
 
             if self._curr_token.token_type == TranslatorToken.VAR_SYMB:
                 items.append(Var(self._curr_token))
 
             else:
-                print("value")
                 items.append(self.value())
 
         return items
@@ -1150,16 +1134,12 @@ class Parser:
             self.eat(TranslatorToken.BOOL_CONST)
 
         elif self._curr_token.token_type == TranslatorToken.ARRAY_CONST:
-            print("array spec")
             is_arr, spec = self.array_spec()
             if not is_arr:
                 self.error(
                     msg=f"Syntax error/\ntrace:\n{self._tokenizer.get_trace()}"
                     )
-            print(f"return {spec}")
             return spec
-
-        print(f"return {token}")
         return _T(token)
 
     def array_spec(self) -> tuple[bool, AstNode]:
@@ -1171,7 +1151,6 @@ class Parser:
         while self._curr_token.token_type != TranslatorToken.SP_CL:
             _type = self.type_spec()
             arr_t.add_definition(_type)
-            print(f"loop: {_type}")
 
             if self._curr_token.token_type == TranslatorToken.COLON:
                 arr_t.add_definition(_T(self._curr_token))
@@ -1180,22 +1159,16 @@ class Parser:
 
             elif self._curr_token.token_type == TranslatorToken.ELLIPSIS:
                 # we will break, next symbol should be ']'
-                print("ellipsis")
                 arr_t.add_definition(_T(self._curr_token))
                 self.eat(TranslatorToken.ELLIPSIS)
-                print(self._curr_token)
                 continue
 
             if self._curr_token.token_type == TranslatorToken.COMMA:
                 arr_t.add_definition(_T(self._curr_token))
                 self.eat(TranslatorToken.COMMA)
 
-            print("next loop")
-
         arr_t.add_definition(_T(self._curr_token))
         self.eat(TranslatorToken.SP_CL)
-
-        print("exit")
         return True, arr_t
 
     def arr_size(self) -> AstNode:
