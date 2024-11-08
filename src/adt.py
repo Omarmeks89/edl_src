@@ -1000,6 +1000,8 @@ class TemplateScope(AbstractDataTable):
         if symbol is None:
             for v in self._contexts.values():
                 symbol = v.lookup(sym_name)
+                if symbol is not None:
+                    return symbol
 
         if only_curr:
             return symbol

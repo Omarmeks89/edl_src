@@ -10,6 +10,7 @@
 from typing import Mapping, Any, Optional, Generator
 
 from src.adt import (
+    EquipmentId,
     AbstractDataTable,
     ContextScope,
     ModuleScope,
@@ -18,7 +19,6 @@ from src.adt import (
     EquipmentTable,
     ConnectionTable,
     SignalTable,
-    EquipmentParamsSymbol,
     Symbol,
     ParamSymbol,
     _NotInit,
@@ -84,11 +84,14 @@ class AdtBuilder:
 
     def run(self, translator: TranslationFinalizer) -> TranslationFinalizer:
         # ADT building stage
+        print("ENTER compiler")
         module = self._parser.translate()
+        print("got module")
         module.visit(self)
 
         # compilation stage (using ADT)
         to_del = []
+        print("RUN")
         for r in self._ctx_resolvers.values():
             ctx_name = r.get_ctx_name()
             for _ in r.get_resolver():
@@ -97,6 +100,7 @@ class AdtBuilder:
                     continue
 
                 for listener in listeners:
+                    print(f"resolve {listener=}")
                     listener.visit(translator)
                     to_del.append(listener.name)
 
@@ -355,7 +359,7 @@ class AdtBuilder:
 
         elif self._curr_scope.scope_type == TranslatorToken.OBJECT:
             if p.name == "Идентификатор":
-                sig_par = EquipmentParamsSymbol(p.name, _type=pd.get_param_type())
+                sig_par = EquipmentId(p.name, _type=pd.get_param_type())
 
         if sig_par is not None:
             self._curr_scope.declare_parameter(sig_par.name, sig_par)

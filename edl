@@ -6,11 +6,10 @@ from typing import Optional
 import click
 
 from src.code_reader import CodeReader
-from src.exceptions import TranslatorError
-from src.translator import Tokenizer, Parser
-from src.preprocessor import make_processor, TextProcessor
 from src.compilers import AdtBuilder
-
+from src.exceptions import TranslatorError
+from src.preprocessor import make_processor, TextProcessor
+from src.translator import Tokenizer, Parser
 from translators.finalizer import TranslationFinalizer
 
 
@@ -48,6 +47,7 @@ def edl(file: str, e: bool, output_path: str) -> None:
         os.write(2, f"preprocessing error:\n{err}".encode("utf-8"))
         exit(1)
 
+    print(proc)
     if e:
         try:
             proc.dump(f"{output_path}/out.txt")
@@ -58,12 +58,16 @@ def edl(file: str, e: bool, output_path: str) -> None:
             exit(1)
 
     lexer = Tokenizer()
+    print(lexer)
     parser = Parser(lexer, reader)
+    print(parser)
     compiler = AdtBuilder(parser)
+    print(compiler)
 
     # choose translator
     finalizer = TranslationFinalizer()
     try:
+        print(f"run finalizer {finalizer=}")
         compiler.run(finalizer)
     except (TranslatorError, OSError) as err:
         os.write(2, f"compilation error:\n{err}\n".encode("utf-8"))
