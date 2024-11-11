@@ -216,7 +216,9 @@ class AdtBuilder:
 
     def connection(self, c: Connection) -> None:
         # TODO add full name for valid object registration
+        init_conn: bool = True
         enclosed_scope = self._curr_scope
+        
         # resolve name at first
         n_ext = c.get_name_extensions()
         r_symbols = []
@@ -233,9 +235,10 @@ class AdtBuilder:
             r_symbols.append(resolving.value)
 
         c_name = f"{c.name}{''.join([f'{name}' for name in r_symbols])}"
-        
+
         conn = self._scopes.get(c_name)
         if conn is None:
+            init_conn = False
             conn = ConnectionTable(c.name, c.node_type, enclosed_scope=enclosed_scope)
             conn.set_name(c_name)
 
@@ -243,14 +246,15 @@ class AdtBuilder:
         self._scopes[c_name] = conn
         self._curr_scope = conn
 
-        for var in c.get_vars():
-            var.visit(self)
+        if not init_conn:
+            for var in c.get_vars():
+                var.visit(self)
 
-        for d in c.get_directives():
-            d.visit(self)
+            for d in c.get_directives():
+                d.visit(self)
 
-        for p in c.get_params():
-            p.visit(self)
+            for p in c.get_params():
+                p.visit(self)
 
         self._curr_scope = enclosed_scope
 
@@ -362,8 +366,6 @@ class AdtBuilder:
 
         if sig_par is not None:
             self._curr_scope.declare_parameter(sig_par.name, sig_par)
-
-        # print(f"{sig_par=} {p=}", self._curr_scope.scope_type)
 
     def var(self, v: Var) -> None:
         """lookup in current scope or context only"""
