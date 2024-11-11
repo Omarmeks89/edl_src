@@ -896,6 +896,9 @@ class ConnectionTable(AbstractDataTable):
     def set_name_extensions(self, ext: list[VarSymbol]) -> None:
         self._name_ext = ext
 
+    def set_name(self, new_name: str) -> None:
+        self._name = new_name
+
     def get_name_extensions(self) -> list[VarSymbol]:
         return self._name_ext
 

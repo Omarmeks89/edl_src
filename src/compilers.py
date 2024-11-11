@@ -149,6 +149,7 @@ class AdtBuilder:
         self._curr_scope = templ_scope
 
     def template(self, t: Template) -> None:
+        print(f"{t.name}")
         enclosed_scope = self._curr_scope
         template = self._scopes.get(t.name)
         if template is None:
@@ -169,6 +170,7 @@ class AdtBuilder:
             p.visit(self)
 
         for conn in t.get_connections():
+            print("into connections")
             conn.visit(self)
 
         for block in t.get_blocks():
@@ -215,31 +217,31 @@ class AdtBuilder:
     def connection(self, c: Connection) -> None:
         # TODO add full name for valid object registration
         enclosed_scope = self._curr_scope
-        conn = self._scopes.get(c.name)
+        # resolve name at first
+        n_ext = c.get_name_extensions()
+        r_symbols = []
+        for n in n_ext:
+            resolving = self._curr_scope.lookup(n.name)
+            if resolving is None:
+                raise TranslatorRuntimeError(
+                    f"var '{n.name}' not found for dynamic name"
+                )
+            if resolving.value is None:
+                raise TranslatorRuntimeError(
+                    f"name resolve from context (symbol '{resolving.name}') not allowed"
+                )
+            r_symbols.append(resolving.value)
+
+        c_name = f"{c.name}{''.join([f'{name}' for name in r_symbols])}"
+        
+        conn = self._scopes.get(c_name)
         if conn is None:
             conn = ConnectionTable(c.name, c.node_type, enclosed_scope=enclosed_scope)
-            n_ext = c.get_name_extensions()
-            r_symbols = []
-            for n in n_ext:
-                resolving = self._curr_scope.lookup(n.name)
-                if resolving is None:
-                    raise TranslatorRuntimeError(
-                        f"var '{n.name}' not found for dynamic name"
-                    )
-                if resolving.value is None:
-                    raise TranslatorRuntimeError(
-                        f"name resolve from context (symbol '{resolving.name}') not allowed"
-                    )
-                r_symbols.append(resolving.value)
+            conn.set_name(c_name)
 
-            # resolve name here
-            c_name = f"{conn.name}{''.join([f'{name}' for name in r_symbols])}"
-            conn.set_name_extensions(n_ext)
-
-            # TODO register by full name
-            self._curr_scope.declare(c_name, conn)
-            self._scopes[c_name] = conn
-            self._curr_scope = conn
+        self._curr_scope.declare(c_name, conn)
+        self._scopes[c_name] = conn
+        self._curr_scope = conn
 
         for var in c.get_vars():
             var.visit(self)
@@ -318,6 +320,7 @@ class AdtBuilder:
     def param_declaration(self, pd: ParamDeclaration) -> None:
         # register parameter in current scope with type
         p = pd.get_param()
+        sig_par = None
         if self._curr_scope.scope_type == TranslatorToken.SIGNAL:
             if p.name == "Идентификатор":
                 sig_par = SignalParamId(p.name, _type=pd.get_param_type())
@@ -359,6 +362,8 @@ class AdtBuilder:
 
         if sig_par is not None:
             self._curr_scope.declare_parameter(sig_par.name, sig_par)
+
+        # print(f"{sig_par=} {p=}", self._curr_scope.scope_type)
 
     def var(self, v: Var) -> None:
         """lookup in current scope or context only"""
@@ -425,7 +430,7 @@ class AdtBuilder:
 
         declared = self._curr_scope._params.get(param_sym.name)
         if declared is None:
-            raise TranslatorRuntimeError(f"parameter '{param_sym.name}' not declared")
+            raise TranslatorRuntimeError(f"parameter '{param_sym.name}' not declared ({pa=})")
 
         for par in declared:
             par: ParamSymbol
