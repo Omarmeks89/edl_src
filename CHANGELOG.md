@@ -3,6 +3,10 @@
 
 <small>[Compare with latest](https://github.com/Omarmeks89/edl_src/compare/v0.0.5-1...HEAD)</small>
 
+### Docs
+
+- update README.md, add types and syntax description ([64b8961](https://github.com/Omarmeks89/edl_src/commit/64b8961e284ba75ce99cbe0d5cebe7dd949c4fbc) by Егор Марков).
+
 ### Features
 
 - refactor project structure ([1822cd8](https://github.com/Omarmeks89/edl_src/commit/1822cd856ab373831bbaf20c22058f9f5d895f91) by Егор Марков).
@@ -13,6 +17,7 @@
 - delete unuseful ebnf files ([8100dc6](https://github.com/Omarmeks89/edl_src/commit/8100dc6be8eef8327a7b03cb83bfb9cc28dda669) by Егор Марков).
 
 <!-- insertion marker -->
+
 
 ## [v0.0.5-1](https://github.com/Omarmeks89/edl_src/releases/tag/v0.0.5-1) - 2024-10-20
 
