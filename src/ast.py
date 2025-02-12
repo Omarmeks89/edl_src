@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Any, Optional
 
 from src.exceptions import TranslatorRuntimeError
@@ -11,16 +11,13 @@ class AstNode:
         return f"{type(self).__name__}()"
 
     @property
-    # @abstractmethod
     def node_type(self) -> TranslatorToken:
         pass
 
     @property
-    # @abstractmethod
     def name(self) -> str:
         pass
 
-    # @abstractmethod
     def visit(self, visitor: Any) -> Any:
         pass
 
@@ -946,9 +943,12 @@ class DynamicVarName(AstNode):
         self._token = token
         self._name_ext = name_ext
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(base_name={self._base_name}, names_ext={self._name_ext})"
+
     @property
     def name(self) -> str:
-        return f"{self.__repr__()}{self._base_name}"
+        return self._base_name
 
     def get_name_extensions(self) -> list[AstNode]:
         return self._name_ext

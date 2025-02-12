@@ -175,6 +175,9 @@ class Tokenizer:
                 except StopIteration:
                     break
 
+            # if found '#' -> set new line
+            # (for simplify preprocessor)
+
             elif self._code[self._pos] == ".":
                 # maybe ellipsis?
                 if self.is_ellipsis(self._code, self._pos):
@@ -430,6 +433,7 @@ class Parser:
 
     def eat(self, token: TranslatorToken) -> None:
         """switch to next token (check token sequence validity)"""
+
         if self._curr_token.token_type == token:
             self._curr_token = next(self._tokens)
             return
@@ -605,14 +609,16 @@ class Parser:
 
     def dyn_name(self) -> AstNode:
         self.eat(TranslatorToken.RP_OP)
-        base = self._curr_token
         name_parts: list[AstNode] = []
+        self.eat(TranslatorToken.VAR_SYMB)
+        var = self._curr_token
         self.eat(TranslatorToken.ID)
         while self._curr_token.token_type == TranslatorToken.CONCAT:
+            self.eat(TranslatorToken.CONCAT)
             name = self.var_extract()
             name_parts.append(name)
         self.eat(TranslatorToken.RP_CL)
-        dyn_name = DynamicVarName(base, name_parts)
+        dyn_name = DynamicVarName(var, name_parts)
         return dyn_name
 
     def template(self) -> AstNode:

@@ -1,0 +1,8 @@
+$var_1: str = "test ";
+
+/ TODO: not detect semi! /
+$var_2: str = "me";
+
+оборудование класс_ц Тест_имени_ + $var_1 + $var_2 {
+    $Идентификатор: str = ($var_1 + $var_2 + $var_10);
+};
