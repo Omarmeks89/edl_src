@@ -1,0 +1,7 @@
+translators
+prod_*
+*conf*
+__pycache__
+venv
+*.txt
+.idea
