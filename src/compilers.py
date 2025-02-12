@@ -149,7 +149,6 @@ class AdtBuilder:
         self._curr_scope = templ_scope
 
     def template(self, t: Template) -> None:
-        print(f"{t.name}")
         enclosed_scope = self._curr_scope
         template = self._scopes.get(t.name)
         if template is None:
@@ -170,7 +169,6 @@ class AdtBuilder:
             p.visit(self)
 
         for conn in t.get_connections():
-            print("into connections")
             conn.visit(self)
 
         for block in t.get_blocks():
@@ -218,7 +216,7 @@ class AdtBuilder:
         # TODO add full name for valid object registration
         init_conn: bool = True
         enclosed_scope = self._curr_scope
-        
+
         # resolve name at first
         n_ext = c.get_name_extensions()
         r_symbols = []
