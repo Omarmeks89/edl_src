@@ -464,6 +464,11 @@ class Parser:
                 node = self.signal()
                 module.add_block(node)
 
+            else:
+                msg = f"unexpected instance: '{self._curr_token.value}' [type: <{self._curr_token.token_type}>]\n"
+                trace = self._tokenizer.get_trace()
+                self.error(msg=f"{msg}{trace}")
+
         return module
 
     def object(self) -> AstNode:
@@ -488,8 +493,14 @@ class Parser:
             elif node.node_type == TranslatorToken.CONNECTION:
                 obj.add_connection(node)
 
+            elif node.node_type == TranslatorToken.SIGNAL:
+                obj.add_connection(node)
+
             else:
-                obj.add_block(node)
+                msg = f"unexpected instance: '{node.name}' [type: <{node.node_type}>]\n"
+                trace = self._tokenizer.get_trace()
+                self.error(msg=f"{msg}{trace}")
+
         return obj
 
     def name(self) -> tuple[str, list[AstNode]]:
@@ -538,6 +549,10 @@ class Parser:
                 # parameter
                 node = self.obj_param()
                 nodes.append(node)
+
+            else:
+                msg = f"unexpected instance: '{self._curr_token.value}' [type {self._curr_token.token_type}]\n(line=<{self._tokenizer._line_pos}>)"
+                self.error(msg=msg)
 
         self.eat(TranslatorToken.FP_CL)
         # handle parsed nodes
@@ -644,8 +659,12 @@ class Parser:
             elif node.node_type == TranslatorToken.CONNECTION:
                 template.add_connection(node)
 
-            else:
+            elif node.node_type == TranslatorToken.OBJECT:
                 template.add_block(node)
+
+            else:
+                msg = f"unexpected instance: '{node.name}'\n(line=<{self._tokenizer._line_pos}>)"
+                self.error(msg=msg)
 
         return template
 
@@ -682,6 +701,11 @@ class Parser:
             elif self._curr_token.token_type == TranslatorToken.CTX_KW:
                 node = self.context()
                 nodes.append(node)
+
+
+            else:
+                msg = f"unexpected instance: '{self._curr_token.value}' [type {self._curr_token.token_type}]\n(line=<{self._tokenizer._line_pos}>)"
+                self.error(msg=msg)
 
         self.eat(TranslatorToken.FP_CL)
         return nodes
@@ -727,6 +751,11 @@ class Parser:
             elif node.node_type == TranslatorToken.CONNECTION:
                 signal.set_connection(node)
 
+            else:
+                msg = f"unexpected instance: '{node.name}' [type: <{node.node_type}>]\n"
+                trace = self._tokenizer.get_trace()
+                self.error(msg=f"{msg}{trace}")
+
         return signal
 
     def s_direct(self) -> AstNode:
@@ -759,6 +788,11 @@ class Parser:
             elif self._curr_token.token_type == TranslatorToken.CONN_KW:
                 node = self.connection()
                 blocks.append(node)
+
+            else:
+                msg = f"unexpected instance: '{self._curr_token.value}' [type: <{self._curr_token.token_type}>]\n"
+                trace = self._tokenizer.get_trace()
+                self.error(msg=f"{msg}{trace}")
 
         self.eat(TranslatorToken.FP_CL)
         return blocks
