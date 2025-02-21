@@ -9,6 +9,29 @@
 
 from typing import Mapping, Any, Optional, Generator
 
+from src._ast import (
+    Module,
+    Context,
+    Template,
+    Object,
+    Connection,
+    Signal,
+    VarDeclaration,
+    ParamDeclaration,
+    VarAssign,
+    ParameterAssign,
+    ParameterOption,
+    _ArrT,
+    PutDirective,
+    PutRule,
+    UseDirective,
+    Range,
+    Var,
+    Value,
+    ArrayValue,
+    AstNode,
+    BindDirective, DynamicVarName,
+)
 from src.adt import (
     EquipmentId,
     AbstractDataTable,
@@ -33,29 +56,6 @@ from src.adt import (
     SignalPersistent,
     ConnectionId,
     ConnectionAddress,
-)
-from src.ast import (
-    Module,
-    Context,
-    Template,
-    Object,
-    Connection,
-    Signal,
-    VarDeclaration,
-    ParamDeclaration,
-    VarAssign,
-    ParameterAssign,
-    ParameterOption,
-    _ArrT,
-    PutDirective,
-    PutRule,
-    UseDirective,
-    Range,
-    Var,
-    Value,
-    ArrayValue,
-    AstNode,
-    BindDirective, DynamicVarName,
 )
 from src.exceptions import (
     TranslatorTypeError,
@@ -261,6 +261,8 @@ class AdtBuilder:
         pass
 
     def signal(self, s: Signal) -> None:
+        # TODO: fix name resolving
+
         enclosed_scope = self._curr_scope
         signal_scope = self._scopes.get(s.name)
         if signal_scope is None:
@@ -271,25 +273,40 @@ class AdtBuilder:
                 s.direction,
                 enclosed_scope=enclosed_scope,
             )
+
+            # =====
+            # we can`t resolve names here because context is
+            # not resolved at the moment, and we lost wished
+            # symbols order
+            #
+            # so we collect var names to resolve at finalizer stage
+            # =====
+
             n_ext = s.get_name_extensions()
             r_symbols = []
-            not_resolved = []
             for n in n_ext:
-                resolving = self._curr_scope.lookup(n.name)
-                if resolving is None:
-                    raise TranslatorRuntimeError(
-                        f"var '{n.name}' not found for dynamic name"
-                    )
-                if resolving.value is not None:
-                    r_symbols.append(resolving.value)
-                    continue
+                r_symbol = self._curr_scope.lookup(n.name)
+                if r_symbol is None:
+                    raise TranslatorRuntimeError(f"var '{n.name}' not exists")
+
+                # ignore resolved name
+                # -----
+                # if resolving.value is not None:
+                #     r_symbols.append(resolving.value)
+                #     continue
 
                 # context is not resolved at the moment
-                not_resolved.append(n)
+                r_symbols.append(r_symbol)
+            #
+            # sig_name = f"{s.name}{''.join([f'{name}' for name in r_symbols])}"
 
-            sig_name = f"{s.name}{''.join([f'{name}' for name in r_symbols])}"
-            signal_scope.set_name_extensions(not_resolved)
-            self._scopes[sig_name] = signal_scope
+            # TODO: why 'not_resolved'? Signal name resolved correct
+            # we add names that are not resolved (from ctx) at the moment
+            # to resolve them later
+            signal_scope.set_name_extensions(r_symbols)
+
+            # remove sig_name as not resolved
+            self._scopes[s.name] = signal_scope
             self._curr_scope = signal_scope
 
         for var in s.get_vars():

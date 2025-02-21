@@ -2,7 +2,7 @@
 
 from typing import Mapping, Optional, Generator, NoReturn
 
-from src.ast import (
+from src._ast import (
     AstNode,
     Module,
     Object,
@@ -494,7 +494,8 @@ class Parser:
                 obj.add_connection(node)
 
             elif node.node_type == TranslatorToken.SIGNAL:
-                obj.add_connection(node)
+                # TODO: no add signal method
+                obj.add_block(node)
 
             else:
                 msg = f"unexpected instance: '{node.name}' [type: <{node.node_type}>]\n"

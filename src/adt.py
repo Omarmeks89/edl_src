@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Optional, Any, Mapping
 
-from src.ast import AstNode, Value, _T, Var, SystemConstValue, Range
+from src._ast import AstNode, Value, _T, Var, SystemConstValue, Range
 from src.exceptions import (
     TranslatorRuntimeError,
     TranslatorParameterError,
