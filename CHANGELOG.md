@@ -9,6 +9,7 @@
 
 ### Bug Fixes
 
+- fixed bug with negative numbers, fix bug with ranges ([2729561](https://github.com/Omarmeks89/edl_src/commit/2729561e17c94fa1b7a8501919949ea2f8eb8474) by Егор Марков). feat: implemenated floas and tildas in range, added range type check
 - fix bug with objects name resolving ([eb7aa9c](https://github.com/Omarmeks89/edl_src/commit/eb7aa9ca98de02a8ecd3e964ac855cf8400713a9) by Егор Марков).
 - fix bug with infinite loop on unclosed comment. Add tracing for unexpected symbols ([65cd1ef](https://github.com/Omarmeks89/edl_src/commit/65cd1ef66e90f07132561e467e40926286a12950) by Егор Марков).
 - fix 'dynamic_name' for VARS ([9616c04](https://github.com/Omarmeks89/edl_src/commit/9616c04acb6174e48fc20045354906ea019aeb2a) by Егор Марков).
@@ -23,6 +24,7 @@
 - delete unuseful ebnf files ([8100dc6](https://github.com/Omarmeks89/edl_src/commit/8100dc6be8eef8327a7b03cb83bfb9cc28dda669) by Егор Марков).
 
 <!-- insertion marker -->
+
 
 
 
