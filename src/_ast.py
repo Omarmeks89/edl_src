@@ -439,10 +439,12 @@ class Value(AstNode):
         self._unary = unary_token
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(val={self._token.value}, type={self._token.token_type})"
+        return f"{type(self).__name__}(val={self.value}, type={self._token.token_type})"
 
     @property
     def value(self) -> Any:
+        if self.negative:
+            return -self._token.value
         return self._token.value
 
     @property

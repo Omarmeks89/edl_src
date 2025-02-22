@@ -1128,38 +1128,61 @@ class Parser:
         self.eat(TranslatorToken.RANGE_KW)
         self.eat(TranslatorToken.SP_OP)
         token = self._curr_token
-        _range: list[AstNode] = [None, None]
+        r_min, r_max = None, None
         if self._curr_token.token_type == TranslatorToken.TILDA:
             self.eat(TranslatorToken.TILDA)
-            _min = TildaValue(token, float("-inf"))
-            _range[0] = _min
+            r_min = TildaValue(token, float("-inf"))
 
         elif self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-            val = self.var_extract()
-            _range[0] = val
+            r_min = self.var_extract()
+
+        # TODO: ...
+        # add MINUS token handling
+        elif self._curr_token.token_type == TranslatorToken.MINUS:
+            r_min = self.value()
+
+        # add numeric
+        elif self._curr_token.token_type == TranslatorToken.FLOAT:
+            r_min = Value(token)
+            self.eat(TranslatorToken.FLOAT)
+
+        elif self._curr_token.token_type == TranslatorToken.INT:
+            r_min = Value(token)
+            self.eat(TranslatorToken.INT)
 
         else:
-            _range[0] = Value(token)
-            self.eat(TranslatorToken.INT)
+            # TODO: create trace for parser
+            self.error(msg=f"impossible range member '{token.value}'")
 
         self.eat(TranslatorToken.COMMA)
         token = self._curr_token
 
         if self._curr_token.token_type == TranslatorToken.TILDA:
             self.eat(TranslatorToken.TILDA)
-            _max = TildaValue(token, float("+inf"))
-            _range[1] = _max
+            r_max = TildaValue(token, float("+inf"))
 
         elif self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-            val = self.var_extract()
-            _range[1] = val
+            r_max = self.var_extract()
 
-        else:
-            _range[1] = Value(token)
+        # TODO: ...
+        # add MINUS token handling
+        elif self._curr_token.token_type == TranslatorToken.MINUS:
+            r_max = self.value()
+
+            # add numeric
+        elif self._curr_token.token_type == TranslatorToken.FLOAT:
+            r_max = Value(token)
+            self.eat(TranslatorToken.FLOAT)
+
+        elif self._curr_token.token_type == TranslatorToken.INT:
+            r_max = Value(token)
             self.eat(TranslatorToken.INT)
 
+        else:
+            self.error(msg=f"impossible range member '{token.value}'")
+
         self.eat(TranslatorToken.SP_CL)
-        return Range(_range[0], _range[1])
+        return Range(r_min, r_max)
 
     def type_spec(self) -> AstNode:
         token = self._curr_token

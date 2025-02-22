@@ -52,7 +52,7 @@ class VarSymbol(Symbol):
     """used for variables"""
 
     def __init__(
-        self, name: str, *, _type: Optional[Any] = None, value: Optional[Value] = None
+        self, name: str, *, _type: Optional[Any] = None, value: Optional[Value] = None,
     ) -> None:
         super().__init__(name, _type=_type)
         self._value: Optional[Value] = value
@@ -65,10 +65,7 @@ class VarSymbol(Symbol):
         if self._value is None:
             return self._value
 
-        value = self._value.value
-        if self._value.negative:
-            value = -value
-        return value
+        return self._value.value
 
     def set_value(self, value: Value) -> None:
         self._value = value

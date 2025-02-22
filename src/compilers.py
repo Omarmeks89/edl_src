@@ -30,7 +30,9 @@ from src._ast import (
     Value,
     ArrayValue,
     AstNode,
-    BindDirective, DynamicVarName,
+    BindDirective,
+    DynamicVarName,
+    TildaValue,
 )
 from src.adt import (
     EquipmentId,
@@ -88,6 +90,7 @@ class AdtBuilder:
         module.visit(self)
 
         # compilation stage (using ADT)
+        # context resolving
         to_del = []
         for r in self._ctx_resolvers.values():
             ctx_name = r.get_ctx_name()
@@ -181,7 +184,10 @@ class AdtBuilder:
         eq_scope = self._scopes.get(o.name)
         if eq_scope is None:
             eq_scope = EquipmentTable(
-                o.name, o.node_type, o.obj_type, enclosed_scope=enclosed_scope,
+                o.name,
+                o.node_type,
+                o.obj_type,
+                enclosed_scope=enclosed_scope,
             )
             n_ext = o.get_name_extensions()
             for n in n_ext:
@@ -261,8 +267,6 @@ class AdtBuilder:
         pass
 
     def signal(self, s: Signal) -> None:
-        # TODO: fix name resolving
-
         enclosed_scope = self._curr_scope
         signal_scope = self._scopes.get(s.name)
         if signal_scope is None:
@@ -289,18 +293,9 @@ class AdtBuilder:
                 if r_symbol is None:
                     raise TranslatorRuntimeError(f"var '{n.name}' not exists")
 
-                # ignore resolved name
-                # -----
-                # if resolving.value is not None:
-                #     r_symbols.append(resolving.value)
-                #     continue
-
                 # context is not resolved at the moment
                 r_symbols.append(r_symbol)
-            #
-            # sig_name = f"{s.name}{''.join([f'{name}' for name in r_symbols])}"
 
-            # TODO: why 'not_resolved'? Signal name resolved correct
             # we add names that are not resolved (from ctx) at the moment
             # to resolve them later
             signal_scope.set_name_extensions(r_symbols)
@@ -316,6 +311,7 @@ class AdtBuilder:
             d.visit(self)
 
         for p in s.get_params():
+            print(f"signal visit param {p}")
             p.visit(self)
 
         conn = s.get_connection()
@@ -332,7 +328,11 @@ class AdtBuilder:
             # if var name declared raise error
             # lookup all scopes
             if self._curr_scope.lookup(v.name):
-                raise TranslatorRuntimeError(f"attempt to redefine registered var name '{v.name}'")
+                raise TranslatorRuntimeError(
+                    f"attempt to redefine registered var name '{v.name}'"
+                )
+
+            # TODO: add value
             var_symbol = VarSymbol(v.name, _type=t)
             self._curr_scope.declare(var_symbol.name, var_symbol)
 
@@ -400,6 +400,7 @@ class AdtBuilder:
         # declare current symbols
         decl.visit(self)
         for v in decl.get_vars():
+
             # TODO add lookup only for current scope
             declared = self._curr_scope.lookup(v.name, only_curr=True)
             if declared is None:
@@ -409,7 +410,9 @@ class AdtBuilder:
                 # var name
                 _value = self._curr_scope.lookup(value.name)
                 if _value is None:
-                    raise TranslatorRuntimeError(f"{__name__}: symbol '{value.name}' not resolved")
+                    raise TranslatorRuntimeError(
+                        f"{__name__}: symbol '{value.name}' not resolved"
+                    )
 
                 value = _value
 
@@ -438,6 +441,7 @@ class AdtBuilder:
         # check that options are possible
         # declare parameter and add into json
         par_value = pa.get_param_value()
+        print(f"{par_value=}")
         par_value.visit(self)
         pd: ParamDeclaration = pa.get_param_decl()
 
@@ -447,13 +451,16 @@ class AdtBuilder:
 
         declared = self._curr_scope._params.get(param_sym.name)
         if declared is None:
-            raise TranslatorRuntimeError(f"parameter '{param_sym.name}' not declared ({pa=})")
+            raise TranslatorRuntimeError(f"parameter '{param_sym.name}' not declared")
 
         for par in declared:
+
+            print(f"{par=}")
             par: ParamSymbol
             if par_value.node_type == TranslatorToken.ID:
                 # we use variable as a value container
                 node = self._curr_scope.lookup(par_value.name)
+                print(f"\t{node=}")
                 if node is None:
                     raise TranslatorRuntimeError(
                         f"variable '{par_value.name}' not initialized"
@@ -471,7 +478,9 @@ class AdtBuilder:
             if par.value is not None:
                 continue
 
+            print(f"match {par=}, {par_value=}")
             if not self._type_matcher.type_match(par, par_value):
+                print("error")
                 raise TranslatorTypeError(f"declared {par.node_type} got {par_value}")
 
             par.set_value(par_value)
@@ -504,7 +513,7 @@ class AdtBuilder:
         if bounded_obj is None:
             raise TranslatorRuntimeError(
                 f"object by full name {full_name} not resolved. DynamicNameError"
-                )
+            )
 
         if self._curr_scope.scope_type == TranslatorToken.SIGNAL:
             self._curr_scope.bind_to(bounded_obj)
@@ -544,7 +553,10 @@ class AdtBuilder:
         self._curr_scope.set_context(ctx)
 
     def range(self, r: Range) -> None:
-        pass
+        print(f"visited range {r}")
+
+        # match range types
+        # TODO: resolve values
 
 
 class TypeMatcher:
@@ -554,20 +566,33 @@ class TypeMatcher:
         """match declared type with current.
         value should be an interface
         """
-        FLOAT = (
-            TranslatorToken.FLOAT_CONST,
-            TranslatorToken.FLOAT,
-            TranslatorToken.RANGE,
-        )
-        INT = (TranslatorToken.INT_CONST, TranslatorToken.INT, TranslatorToken.RANGE)
+        FLOAT = (TranslatorToken.FLOAT_CONST, TranslatorToken.FLOAT)
+        INT = (TranslatorToken.INT_CONST, TranslatorToken.INT)
         STR = (TranslatorToken.STR_CONST, TranslatorToken.STR)
         BOOL = (TranslatorToken.BOOL_CONST, TranslatorToken.BOOL)
 
         if symb.node_type == TranslatorToken.FLOAT_CONST:
-            return True if value.node_type in FLOAT else False
+            if value.node_type == TranslatorToken.RANGE:
+                value: Range
+                return (
+                    value.min.node_type == TranslatorToken.FLOAT
+                    or isinstance(value.min, TildaValue)
+                ) and (
+                    value.max.node_type == TranslatorToken.FLOAT
+                    or isinstance(value.max, TildaValue)
+                )
+
+            return value.node_type in FLOAT
 
         elif symb.node_type == TranslatorToken.INT_CONST:
-            return True if value.node_type in INT else False
+            if value.node_type == TranslatorToken.RANGE:
+                value: Range
+                return (
+                    value.min.node_type == TranslatorToken.INT
+                    and value.max.node_type == TranslatorToken.INT
+                )
+
+            return value.node_type in INT
 
         elif symb.node_type == TranslatorToken.BOOL_CONST:
             return True if value.node_type in BOOL else False
