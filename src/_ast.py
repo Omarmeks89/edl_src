@@ -1077,9 +1077,17 @@ class Range(AstNode):
     def min(self) -> Any:
         return self._min
 
+    @min.setter
+    def min(self, val: Any) -> None:
+        self._min = val
+
     @property
     def max(self) -> Any:
         return self._max
+
+    @max.setter
+    def max(self, val: Any) -> None:
+        self._max = val
 
     def visit(self, visitor: Any) -> Any:
         visitor.range(self)

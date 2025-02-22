@@ -263,7 +263,8 @@ class AdtBuilder:
         self._curr_scope = enclosed_scope
 
     def dynamic_name(self, dn: DynamicVarName) -> None:
-        print(f"DYNAMIC VAR NAME: {dn=}")
+        # TODO: in var_assign only!
+        # print(f"DYNAMIC VAR NAME: {dn=}")
         pass
 
     def signal(self, s: Signal) -> None:
@@ -311,7 +312,6 @@ class AdtBuilder:
             d.visit(self)
 
         for p in s.get_params():
-            print(f"signal visit param {p}")
             p.visit(self)
 
         conn = s.get_connection()
@@ -332,7 +332,6 @@ class AdtBuilder:
                     f"attempt to redefine registered var name '{v.name}'"
                 )
 
-            # TODO: add value
             var_symbol = VarSymbol(v.name, _type=t)
             self._curr_scope.declare(var_symbol.name, var_symbol)
 
@@ -395,14 +394,16 @@ class AdtBuilder:
         value = va.get_value()
 
         # check declared symbol (vor var_extract)
+        # call dynamic name
         value.visit(self)
 
         # declare current symbols
         decl.visit(self)
         for v in decl.get_vars():
+            v.visit(self)
 
-            # TODO add lookup only for current scope
             declared = self._curr_scope.lookup(v.name, only_curr=True)
+
             if declared is None:
                 raise TranslatorRuntimeError(f"variable {v.name} not found")
 
@@ -410,9 +411,7 @@ class AdtBuilder:
                 # var name
                 _value = self._curr_scope.lookup(value.name)
                 if _value is None:
-                    raise TranslatorRuntimeError(
-                        f"{__name__}: symbol '{value.name}' not resolved"
-                    )
+                    raise TranslatorRuntimeError(f"symbol '{value.name}' not resolved")
 
                 value = _value
 
@@ -441,7 +440,6 @@ class AdtBuilder:
         # check that options are possible
         # declare parameter and add into json
         par_value = pa.get_param_value()
-        print(f"{par_value=}")
         par_value.visit(self)
         pd: ParamDeclaration = pa.get_param_decl()
 
@@ -454,13 +452,10 @@ class AdtBuilder:
             raise TranslatorRuntimeError(f"parameter '{param_sym.name}' not declared")
 
         for par in declared:
-
-            print(f"{par=}")
             par: ParamSymbol
             if par_value.node_type == TranslatorToken.ID:
                 # we use variable as a value container
                 node = self._curr_scope.lookup(par_value.name)
-                print(f"\t{node=}")
                 if node is None:
                     raise TranslatorRuntimeError(
                         f"variable '{par_value.name}' not initialized"
@@ -478,9 +473,7 @@ class AdtBuilder:
             if par.value is not None:
                 continue
 
-            print(f"match {par=}, {par_value=}")
             if not self._type_matcher.type_match(par, par_value):
-                print("error")
                 raise TranslatorTypeError(f"declared {par.node_type} got {par_value}")
 
             par.set_value(par_value)
@@ -553,10 +546,30 @@ class AdtBuilder:
         self._curr_scope.set_context(ctx)
 
     def range(self, r: Range) -> None:
-        print(f"visited range {r}")
 
-        # match range types
-        # TODO: resolve values
+        if r.max.node_type == TranslatorToken.ID:
+            value = self._curr_scope.lookup(r.max.name)
+            if value is None:
+                raise TranslatorRuntimeError(
+                    f"value '{r.max.name}' in range not resolved"
+                )
+
+            if not isinstance(value.value, Value):
+                raise TranslatorRuntimeError("invalid value type")
+
+            r.max = value.value
+
+        if r.min.node_type == TranslatorToken.ID:
+            value = self._curr_scope.lookup(r.min.name)
+            if value is None:
+                raise TranslatorRuntimeError(
+                    f"value '{r.min.name}' in range not resolved"
+                )
+
+            if not isinstance(value.value, Value):
+                raise TranslatorRuntimeError("invalid value type")
+
+            r.min = value.value
 
 
 class TypeMatcher:
@@ -595,10 +608,10 @@ class TypeMatcher:
             return value.node_type in INT
 
         elif symb.node_type == TranslatorToken.BOOL_CONST:
-            return True if value.node_type in BOOL else False
+            return value.node_type in BOOL
 
         elif symb.node_type == TranslatorToken.STR_CONST:
-            return True if value.node_type in STR else False
+            return value.node_type in STR
 
         elif symb.node_type == TranslatorToken.ARRAY_CONST:
             return self.match_array(symb, value)
@@ -627,7 +640,7 @@ class ContextResolver:
         """generator, that doesn`t return anything, only set ctx"""
 
         # now waiting [[str:6, int:2]..]
-        values = (v.value for v in self._value_src.value)
+        values = (v.value for v in self._value_src.value.value)
         for value in values:
             if len(value) != len(self._keys):
                 raise TranslatorDirectiveError(
@@ -644,6 +657,6 @@ class ContextResolver:
                 if not self._matcher.type_match(declared, val):
                     raise TranslatorTypeError(f"declared {declared} got {val}")
 
-                self._ctx.set_value(declared.name, val)
+                self._ctx.set_value(declared.name, val.value)
 
             yield

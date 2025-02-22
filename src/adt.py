@@ -52,20 +52,17 @@ class VarSymbol(Symbol):
     """used for variables"""
 
     def __init__(
-        self, name: str, *, _type: Optional[Any] = None, value: Optional[Value] = None,
+        self,
+        name: str,
+        *,
+        _type: Optional[Any] = None,
+        value: Optional[Value] = None,
     ) -> None:
         super().__init__(name, _type=_type)
         self._value: Optional[Value] = value
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(name={self._name}, type={self._type}, val={self._value})"
-
-    @property
-    def value(self) -> Any | None:
-        if self._value is None:
-            return self._value
-
-        return self._value.value
 
     def set_value(self, value: Value) -> None:
         self._value = value
@@ -206,7 +203,9 @@ class SignalParamsSymbol(ParamSymbol):
     """base class for signal parameters"""
 
     _allowed_opt: TranslatorToken = TranslatorToken.SIGN_OPT
-    _multiple: set[str] = {"параметр",}
+    _multiple: set[str] = {
+        "параметр",
+    }
 
     def __init__(
         self,
@@ -608,10 +607,12 @@ class AbstractDataTable:
         self._ctx: Optional["ContextScope"] = None
 
     def __repr__(self) -> str:
-        return (f"{type(self).__name__}({self._name}, "
-                f"{self._scope_type}, {type(self._enclosed_scope)}, "
-                f"symbs={self._symbols}, params={self._params}, "
-                f"ctx={self._ctx})")
+        return (
+            f"{type(self).__name__}({self._name}, "
+            f"{self._scope_type}, {type(self._enclosed_scope)}, "
+            f"symbs={self._symbols}, params={self._params}, "
+            f"ctx={self._ctx})"
+        )
 
     @property
     def name(self) -> str:
@@ -666,7 +667,9 @@ class AbstractDataTable:
     def declare(self, sym_name: str, symbol: Symbol) -> None:
         """declare -> for variables"""
         if sym_name in self._symbols:
-            raise TranslatorRuntimeError(f"attempt to redefine symbol '{sym_name}' in scope '{self._name}'")
+            raise TranslatorRuntimeError(
+                f"attempt to redefine symbol '{sym_name}' in scope '{self._name}'"
+            )
         self._symbols[sym_name] = symbol
 
     @abstractmethod
