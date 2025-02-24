@@ -9,6 +9,7 @@
 
 ### Bug Fixes
 
+- fix ADT frames symbols lookup ([2caeddd](https://github.com/Omarmeks89/edl_src/commit/2caeddda9afd49f35cf96c8a67b41ff421227c17) by Егор Марков).
 - fix bug with positional error in signal, fix bug with range type checking ([ab6cdd3](https://github.com/Omarmeks89/edl_src/commit/ab6cdd38551e248be87e4fc498b28a605aa6098c) by Егор Марков). feat: add signal values types checking
 - fixed bug with negative numbers, fix bug with ranges ([2729561](https://github.com/Omarmeks89/edl_src/commit/2729561e17c94fa1b7a8501919949ea2f8eb8474) by Егор Марков). feat: implemenated floas and tildas in range, added range type check
 - fix bug with objects name resolving ([eb7aa9c](https://github.com/Omarmeks89/edl_src/commit/eb7aa9ca98de02a8ecd3e964ac855cf8400713a9) by Егор Марков).
@@ -25,6 +26,7 @@
 - delete unuseful ebnf files ([8100dc6](https://github.com/Omarmeks89/edl_src/commit/8100dc6be8eef8327a7b03cb83bfb9cc28dda669) by Егор Марков).
 
 <!-- insertion marker -->
+
 
 
 
