@@ -96,10 +96,13 @@ class AdtBuilder:
             ctx_name = r.get_ctx_name()
             for _ in r.get_resolver():
                 listeners = self._ctx_listeners.get(ctx_name)
+
+                # print(ctx_name, listeners)
                 if listeners is None:
                     continue
 
                 for listener in listeners:
+                    # print(f"handle {ctx_name} -> {listener}")
                     listener.visit(translator)
                     to_del.append(listener.name)
 
@@ -108,10 +111,12 @@ class AdtBuilder:
                 del self._ctx_listeners[ctx_name]
 
         for d in to_del:
+            # print(f"delete {d}")
             if d in self._scopes:
                 del self._scopes[d]
 
         for k, v in self._scopes.items():
+            # print(f"visit: {k}")
             v.visit(translator)
 
         return translator
@@ -124,6 +129,7 @@ class AdtBuilder:
             self._curr_scope = module_scope
 
         for var in m.get_vars():
+            # print(var)
             var.visit(self)
 
         for d in m.get_directives():
@@ -136,9 +142,7 @@ class AdtBuilder:
         # declare context into current scope
         # declare vars and push them into the scope
         if not isinstance(self._curr_scope, TemplateScope):
-            raise TranslatorTypeError(
-                f"invalid scope type for context: {self._curr_scope}"
-            )
+            raise TranslatorTypeError(f"context not allowed in {self._curr_scope}")
 
         ctx_scope = ContextScope(ctx.name)
         self._curr_scope.set_context(ctx.name, ctx_scope)
@@ -193,9 +197,7 @@ class AdtBuilder:
             for n in n_ext:
                 if self._curr_scope.lookup(n.name):
                     continue
-                raise TranslatorRuntimeError(
-                    f"var '{n.name}' not found for dynamic name"
-                )
+                raise TranslatorRuntimeError(f"'{n.name}' not found for dynamic name")
 
             eq_scope.set_name_extensions(n_ext)
             self._scopes[o.name] = eq_scope
@@ -229,12 +231,10 @@ class AdtBuilder:
         for n in n_ext:
             resolving = self._curr_scope.lookup(n.name)
             if resolving is None:
-                raise TranslatorRuntimeError(
-                    f"var '{n.name}' not found for dynamic name"
-                )
+                raise TranslatorRuntimeError(f"'{n.name}' not found for dynamic name")
             if resolving.value is None:
                 raise TranslatorRuntimeError(
-                    f"name resolve from context (symbol '{resolving.name}') not allowed"
+                    f"context symbol '{resolving.name}' not allowed"
                 )
             r_symbols.append(resolving.value)
 
@@ -270,6 +270,7 @@ class AdtBuilder:
     def signal(self, s: Signal) -> None:
         enclosed_scope = self._curr_scope
         signal_scope = self._scopes.get(s.name)
+
         if signal_scope is None:
             signal_scope = SignalTable(
                 s.name,
@@ -317,6 +318,8 @@ class AdtBuilder:
         conn = s.get_connection()
         if conn is not None:
             conn.visit(self)
+
+        # print(f"curr signal {s.name} scope: {self._curr_scope.get_context()}")
 
         self._curr_scope = enclosed_scope
 
@@ -535,11 +538,14 @@ class AdtBuilder:
         # subscribe current scope on ctx
         dest = ud.dest()
         listeners = self._ctx_listeners.get(dest.name)
+
+        # print(f"\t\tctx {dest.name} {listeners=}")
         if listeners is None:
             self._ctx_listeners[dest.name] = []
         self._ctx_listeners[dest.name].append(self._curr_scope)
 
         ctx = self._curr_scope.lookup_context(dest.name)
+        # print(f"\t\tgot {ctx=}, scope={self._curr_scope.name}")
         if ctx is None:
             return None
 

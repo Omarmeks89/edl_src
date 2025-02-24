@@ -677,7 +677,13 @@ class AbstractDataTable:
         """declare parameter and check that param is allowed for scope"""
         pass
 
-    def lookup(self, sym_name: str, *, only_curr: bool = False) -> Symbol | None:
+    def lookup(
+        self,
+        sym_name: str,
+        *,
+        only_curr: bool = False,
+        include_context: bool = True,
+    ) -> Symbol | None:
         """lookup for VARIABLE
         If value is returned, symbol is declared
         only_curr - lookup only in current scope.
@@ -686,7 +692,8 @@ class AbstractDataTable:
         if symbol is None:
             # if nothing in symbols let`s try to find in
             # context and resolve name
-            if self._ctx is not None:
+            if self._ctx is not None and include_context:
+                # print(f"\tlookup ctx = {self._ctx}")
                 symbol = self._ctx.lookup(sym_name)
 
         if only_curr:
@@ -868,6 +875,7 @@ class SignalTable(AbstractDataTable):
         self._params[param_name].append(param)
 
     def bind_to(self, b: "AbstractDataTable") -> None:
+        """bind to signal source"""
         if self._binded is None and id(self) != id(b):
             self._binded = ConnectionLink(b.name, b)
 
