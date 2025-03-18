@@ -18,6 +18,7 @@
 
 ### Features
 
+- add new signal types: 'аналог_р' & 'дискрет_р' ([20544b5](https://github.com/Omarmeks89/edl_src/commit/20544b506ccbd48728d9ae5cf0d1cbc11692accc) by Егор Марков).
 - refactor project structure ([1822cd8](https://github.com/Omarmeks89/edl_src/commit/1822cd856ab373831bbaf20c22058f9f5d895f91) by Егор Марков).
 - working on new implementation ([42670c5](https://github.com/Omarmeks89/edl_src/commit/42670c50c1660e934f95a192709eb859bdeb6d09) by Егор Марков).
 
@@ -26,6 +27,7 @@
 - delete unuseful ebnf files ([8100dc6](https://github.com/Omarmeks89/edl_src/commit/8100dc6be8eef8327a7b03cb83bfb9cc28dda669) by Егор Марков).
 
 <!-- insertion marker -->
+
 
 
 
