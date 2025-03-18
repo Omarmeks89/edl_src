@@ -194,6 +194,10 @@ python edl.py -e -f example_with_ctx.edl --output-path=old_bcp
 python edl.py -f example_with_ctx.edl --output-path=old_bcp
 ```
 
+```ignorelang
+edl -g -f upd_prod_scada_conf.edl --output-path=test_compile
+```
+
 ### Конфигурация
 ```bash
 mv edl.py edl

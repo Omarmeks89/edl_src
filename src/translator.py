@@ -68,8 +68,13 @@ class Tokenizer:
         "метка": Token("метка", TranslatorToken.SIGN_OPT),
         "входной": Token("входной", TranslatorToken.SIGN_DIRECT),
         "выходной": Token("выходной", TranslatorToken.SIGN_DIRECT),
+        # ---- signal types
         "аналог": Token("аналог", TranslatorToken.SIGN_TYPE),
         "дискрет": Token("дискрет", TranslatorToken.SIGN_TYPE),
+        # extension for handling system-calculated signals
+        # (new signal types)
+        "аналог_р": Token("аналог_р", TranslatorToken.SIGN_TYPE),
+        "дискрет_р": Token("дискрет_р", TranslatorToken.SIGN_TYPE),
         "использовать": Token("использовать", TranslatorToken.USE_KW),
         "линейно": Token("линейно", TranslatorToken.USE_METHOD),
         "значения": Token("значения", TranslatorToken.VALS_KW),

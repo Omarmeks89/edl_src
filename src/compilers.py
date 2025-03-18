@@ -264,7 +264,6 @@ class AdtBuilder:
 
     def dynamic_name(self, dn: DynamicVarName) -> None:
         # TODO: in var_assign only!
-        # print(f"DYNAMIC VAR NAME: {dn=}")
         pass
 
     def signal(self, s: Signal) -> None:
@@ -318,8 +317,6 @@ class AdtBuilder:
         conn = s.get_connection()
         if conn is not None:
             conn.visit(self)
-
-        # print(f"curr signal {s.name} scope: {self._curr_scope.get_context()}")
 
         self._curr_scope = enclosed_scope
 
