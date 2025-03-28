@@ -209,7 +209,9 @@ class SignalParamsSymbol(ParamSymbol):
     """base class for signal parameters"""
 
     _allowed_opt: TranslatorToken = TranslatorToken.SIGN_OPT
-    _multiple: set[str] = {"параметр",}
+    _multiple: set[str] = {
+        "параметр",
+    }
 
     def __init__(
         self,
@@ -611,10 +613,12 @@ class AbstractDataTable:
         self._ctx: Optional["ContextScope"] = None
 
     def __repr__(self) -> str:
-        return (f"{type(self).__name__}({self._name}, "
-                f"{self._scope_type}, {type(self._enclosed_scope)}, "
-                f"symbs={self._symbols}, params={self._params}, "
-                f"ctx={self._ctx})")
+        return (
+            f"{type(self).__name__}({self._name}, "
+            f"{self._scope_type}, {type(self._enclosed_scope)}, "
+            f"symbs={self._symbols}, params={self._params}, "
+            f"ctx={self._ctx})"
+        )
 
     @property
     def name(self) -> str:
@@ -669,7 +673,9 @@ class AbstractDataTable:
     def declare(self, sym_name: str, symbol: Symbol) -> None:
         """declare -> for variables"""
         if sym_name in self._symbols:
-            raise TranslatorRuntimeError(f"attempt to redefine symbol '{sym_name}' in scope '{self._name}'")
+            raise TranslatorRuntimeError(
+                f"attempt to redefine symbol '{sym_name}' in scope '{self._name}'"
+            )
         self._symbols[sym_name] = symbol
 
     @abstractmethod

@@ -55,7 +55,8 @@ from src.ast import (
     Value,
     ArrayValue,
     AstNode,
-    BindDirective, DynamicVarName,
+    BindDirective,
+    DynamicVarName,
 )
 from src.exceptions import (
     TranslatorTypeError,
@@ -181,7 +182,10 @@ class AdtBuilder:
         eq_scope = self._scopes.get(o.name)
         if eq_scope is None:
             eq_scope = EquipmentTable(
-                o.name, o.node_type, o.obj_type, enclosed_scope=enclosed_scope,
+                o.name,
+                o.node_type,
+                o.obj_type,
+                enclosed_scope=enclosed_scope,
             )
             n_ext = o.get_name_extensions()
             for n in n_ext:
@@ -311,7 +315,9 @@ class AdtBuilder:
             # if var name declared raise error
             # lookup all scopes
             if self._curr_scope.lookup(v.name):
-                raise TranslatorRuntimeError(f"attempt to redefine registered var name '{v.name}'")
+                raise TranslatorRuntimeError(
+                    f"attempt to redefine registered var name '{v.name}'"
+                )
             var_symbol = VarSymbol(v.name, _type=t)
             self._curr_scope.declare(var_symbol.name, var_symbol)
 
@@ -387,7 +393,9 @@ class AdtBuilder:
                 # var name
                 _value = self._curr_scope.lookup(value.name)
                 if _value is None:
-                    raise TranslatorRuntimeError(f"{__name__}: symbol '{value.name}' not resolved")
+                    raise TranslatorRuntimeError(
+                        f"{__name__}: symbol '{value.name}' not resolved"
+                    )
 
                 value = _value
 
@@ -482,7 +490,7 @@ class AdtBuilder:
         if bounded_obj is None:
             raise TranslatorRuntimeError(
                 f"object by full name {full_name} not resolved. DynamicNameError"
-                )
+            )
 
         if self._curr_scope.scope_type == TranslatorToken.SIGNAL:
             self._curr_scope.bind_to(bounded_obj)

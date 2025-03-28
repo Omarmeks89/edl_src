@@ -21,11 +21,18 @@ class CodeReader:
     def name(self) -> str:
         return self._f_name
 
-    def reader(self) -> Generator[None, None, str]:
-        with open(self._f_name, "r", encoding="utf-8") as file:
+    def reader(
+        self,
+        *,
+        mode: str = "r",
+        encoding: str = "utf-8",
+    ) -> Generator[None, None, str]:
+        with open(self._f_name, mode=mode, encoding=encoding) as file:
             for line in file.readlines():
-                self._lines.append(line)
                 yield line
+
+    def write_line(self, line: str) -> None:
+        self._lines.append(line)
 
     def code_lines(self) -> Generator[tuple[int, str], None, None]:
         if len(self._lines) == 0:
