@@ -1,11 +1,18 @@
 EBNF grammar rules for EDL preprocessor
 
 ===================================================================================================
-directive       : START_MACRO load EOL
-load            : load_kw parameter symbol
-load_kw         : загрузить
-parameter       : [\"a-zA-Zа-яА-Я_0-9\/\\]+
+directive       : START_MACRO (upload | define) EOL
+upload          : upload_kw parameter symbol
+upload_kw       : upload
+parameter       : [\"\'a-zA-Zа-яА-Я_0-9\/\\]+
 symbol          : [a-zA-Zа-яА-Я_0-9]+
+
+define          : define_kw symbol value*
+define_kw       : define
+symbol          : [a-zA-Zа-яА-Я_0-9]+
+value           : numerical | literal
+numerical       : [0-9a-fA-FOo\.]+
+literal         : [\"\'a-zA-Zа-яА-Я_0-9\/\\]+
 
 START_MACRO     : "#"
 EOL             : "\n"

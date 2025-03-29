@@ -175,6 +175,13 @@ class Tokenizer:
                 except StopIteration:
                     break
 
+            # skip preprocessor directives
+            elif self._code[self._pos] == "#":
+                try:
+                    self._set_new_line()
+                except StopIteration:
+                    break
+
             elif self._code[self._pos] == ".":
                 # maybe ellipsis?
                 if self.is_ellipsis(self._code, self._pos):

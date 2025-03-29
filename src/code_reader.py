@@ -15,7 +15,7 @@ class CodeReader:
         self._lines: list[str] = []
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(file={self._f_name})"
+        return f"{type(self).__name__}(file={self._f_name}, lines={self._lines})"
 
     @property
     def name(self) -> str:
@@ -40,6 +40,13 @@ class CodeReader:
 
         for idx, line in enumerate(self._lines):
             yield idx, line
+
+    def get_code_line(self, idx: int) -> str:
+        """
+        Raises:
+            IndexError: on invalid index
+        """
+        return self._lines[idx - 1]
 
     def read_preprocessed(self) -> Generator[None, None, str]:
         """get preprocessed text to parser from memory"""
