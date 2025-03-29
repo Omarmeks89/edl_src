@@ -187,7 +187,7 @@ class Lexer:
                         # shift pos forward for valid trace message
                         self._pos = pos
                         self.error(
-                            msg=f"unsupported macro symbol '{symb}'\n"
+                                msg=f"unsupported macro symbol '{symb}'\n\n"
                             f"{self.get_trace(trace_token)}"
                         )
 
@@ -205,7 +205,7 @@ class Lexer:
                         # shift pos forward for valid trace message
                         self._pos = pos
                         self.error(
-                            msg=f"unsupported macro symbol '{symb}'\n"
+                                msg=f"unsupported macro symbol '{symb}'\n\n"
                             f"{self.get_trace(trace_token)}"
                         )
 
@@ -248,7 +248,9 @@ class Lexer:
                 code_line=self._line_pos,
                 file_name=self._reader_obj.name,
             )
-            self.error(msg=f"not numerical symbol\n{self.get_trace(t)}")
+            self.error(
+                    msg=f"not numerical symbol '{numeric[-1]}'\n\n{self.get_trace(t)}"
+            )
 
         numeric = "".join(symbols)
         return PreprocessorToken(
@@ -411,7 +413,7 @@ class Preprocessor:
             self._token = next(self._token_gen)
             return
         self.error(
-            msg=f"unexpected symbol '{self._token.value}'\n"
+                msg=f"unexpected symbol '{self._token.value}'\n\n"
             f"{self._lexer.get_trace(self._token)}"
         )
 
@@ -449,7 +451,7 @@ class Preprocessor:
 
             else:
                 self.error(
-                    msg=f"unexpected symbol '{self._token.value}'\n"
+                        msg=f"unexpected symbol '{self._token.value}'\n\n"
                     f"{self._lexer.get_trace(self._token)}"
                 )
 
