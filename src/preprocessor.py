@@ -25,13 +25,13 @@ class TokenType(StrEnum):
 class PreprocessorToken:
 
     def __init__(
-            self,
-            value: str,
-            _type: TokenType,
-            token_len: int,
-            *,
-            code_line: int = 0,
-            file_name: str = "",
+        self,
+        value: str,
+        _type: TokenType,
+        token_len: int,
+        *,
+        code_line: int = 0,
+        file_name: str = "",
     ) -> None:
         self.value = value
         self.type: TokenType = _type
@@ -49,8 +49,8 @@ class Lexer:
     """Lexer for preprocessor"""
 
     _reserved_keywords: Mapping[str, PreprocessorToken] = {
-            "upload": PreprocessorToken("upload", TokenType.UPLOAD, 9),
-            "define": PreprocessorToken("define", TokenType.DEFINE, 6),
+        "upload": PreprocessorToken("upload", TokenType.UPLOAD, 9),
+        "define": PreprocessorToken("define", TokenType.DEFINE, 6),
     }
 
     def __init__(self) -> None:
@@ -127,16 +127,14 @@ class Lexer:
 
         while self._pos < len(self._code):
 
-            print(self._reader_obj)
-
             if self._code[self._pos] == "#":
                 self._pos += 1
                 yield PreprocessorToken(
-                        "START_MACRO",
-                        TokenType.START_MACRO,
-                        1,
-                        code_line=self._line_pos,
-                        file_name=self._reader_obj.name,
+                    "START_MACRO",
+                    TokenType.START_MACRO,
+                    1,
+                    code_line=self._line_pos,
+                    file_name=self._reader_obj.name,
                 )
 
                 while self._pos < len(self._code):
@@ -155,11 +153,11 @@ class Lexer:
                     elif self._code[self._pos] == "\n":
                         self._reader_obj.write_line(self._code)
                         yield PreprocessorToken(
-                                "EOL",
-                                TokenType.EOL,
-                                1,
-                                code_line=self._line_pos,
-                                file_name=self._reader_obj.name,
+                            "EOL",
+                            TokenType.EOL,
+                            1,
+                            code_line=self._line_pos,
+                            file_name=self._reader_obj.name,
                         )
                         self._set_new_line()
                         break
@@ -174,20 +172,54 @@ class Lexer:
                     elif self._code[self._pos].isdigit():
                         yield self._parse_numeric(self._code)
 
-                    # scip other symbols - we don`t see them
+                    # trace on unsupported symbols (array, dict)
+                    elif self._code[self._pos] == "{":
+                        pos = self._code.find("}")
+                        symb = self._code[self._pos]
+                        trace_token = PreprocessorToken(
+                            self._code[self._pos],
+                            TokenType.SYMBOL,
+                            pos - self._pos,
+                            code_line=self._line_pos,
+                            file_name=self._reader_obj.name,
+                        )
+
+                        # shift pos forward for valid trace message
+                        self._pos = pos
+                        self.error(
+                            msg=f"unsupported macro symbol '{symb}'\n"
+                            f"{self.get_trace(trace_token)}"
+                        )
+
+                    elif self._code[self._pos] == "[":
+                        pos = self._code.find("]")
+                        symb = self._code[self._pos]
+                        trace_token = PreprocessorToken(
+                            self._code[self._pos],
+                            TokenType.SYMBOL,
+                            pos - self._pos,
+                            code_line=self._line_pos,
+                            file_name=self._reader_obj.name,
+                        )
+
+                        # shift pos forward for valid trace message
+                        self._pos = pos
+                        self.error(
+                            msg=f"unsupported macro symbol '{symb}'\n"
+                            f"{self.get_trace(trace_token)}"
+                        )
 
             else:
                 self._reader_obj.write_line(self._code)
                 if not self._set_new_line():
                     break
 
-        print(self._reader_obj)
         yield PreprocessorToken(
-                "EOF",
-                TokenType.EOF,
-                1,
-                code_line=self._line_pos,
-                file_name=self._reader_obj.name,
+            "EOF",
+            TokenType.EOF,
+            1,
+            code_line=self._line_pos,
+            file_name=self._reader_obj.name,
         )
 
     def _parse_numeric(self, code: str) -> PreprocessorToken:
@@ -200,7 +232,7 @@ class Lexer:
                 continue
 
             elif code[self._pos] == " " or code[self._pos] == "\n":
-                self._pos += 1
+                # self._pos += 1
                 break
 
             # handle unexpected (for numeric value) symbol
@@ -210,21 +242,21 @@ class Lexer:
             self._pos += 1
             numeric = "".join(symbols)
             t = PreprocessorToken(
-                    numeric,
-                    TokenType.VALUE,
-                    len(numeric),
-                    code_line=self._line_pos,
-                    file_name=self._reader_obj.name,
-            )
-            self.error(msg=f"not numerical symbol\n{self.get_trace(t)}")
-
-        numeric = "".join(symbols)
-        return PreprocessorToken(
                 numeric,
                 TokenType.VALUE,
                 len(numeric),
                 code_line=self._line_pos,
                 file_name=self._reader_obj.name,
+            )
+            self.error(msg=f"not numerical symbol\n{self.get_trace(t)}")
+
+        numeric = "".join(symbols)
+        return PreprocessorToken(
+            numeric,
+            TokenType.VALUE,
+            len(numeric),
+            code_line=self._line_pos,
+            file_name=self._reader_obj.name,
         )
 
     def _parse_literal(self, code: str) -> PreprocessorToken:
@@ -245,11 +277,11 @@ class Lexer:
 
             # user defined symbol
             return PreprocessorToken(
-                    symbol,
-                    TokenType.SYMBOL,
-                    len(symbol),
-                    code_line=self._line_pos,
-                    file_name=self._reader_obj.name,
+                symbol,
+                TokenType.SYMBOL,
+                len(symbol),
+                code_line=self._line_pos,
+                file_name=self._reader_obj.name,
             )
 
         return token
@@ -266,11 +298,11 @@ class Lexer:
 
         token_value = "".join(p_symbols)
         return PreprocessorToken(
-                token_value,
-                TokenType.PARAMETER,
-                len(token_value),
-                code_line=self._line_pos,
-                file_name=self._reader_obj.name,
+            token_value,
+            TokenType.PARAMETER,
+            len(token_value),
+            code_line=self._line_pos,
+            file_name=self._reader_obj.name,
         )
 
     def error(self, *, msg: str = "") -> NoReturn:
@@ -299,13 +331,7 @@ class Lexer:
 class Loader:
     """Loader used in 'upload' directive to load files"""
 
-    def load(
-            self,
-            f_name: str,
-            *,
-            mode: str = "r",
-            encoding: str = "utf-8"
-    ) -> str:
+    def load(self, f_name: str, *, mode: str = "r", encoding: str = "utf-8") -> str:
         with open(f_name, mode=mode, encoding=encoding) as file:
             return file.read()
 
@@ -329,11 +355,7 @@ class Directive:
 class DefineDirective(Directive):
 
     def __init__(
-            self,
-            token: PreprocessorToken,
-            code_line: str,
-            *,
-            value: Any | None = None
+        self, token: PreprocessorToken, code_line: str, *, value: Any | None = None
     ) -> None:
         self.token = token
         self.code = code_line
@@ -343,10 +365,7 @@ class DefineDirective(Directive):
 class UploadDirective(Directive):
 
     def __init__(
-            self,
-            token: PreprocessorToken,
-            path: str | pathlib.Path,
-            code_line: str
+        self, token: PreprocessorToken, path: str | pathlib.Path, code_line: str
     ) -> None:
         self.token = token
         self.code = code_line
@@ -392,8 +411,8 @@ class Preprocessor:
             self._token = next(self._token_gen)
             return
         self.error(
-                msg=f"unexpected symbol '{self._token.value}'\n"
-                    f"{self._lexer.get_trace(self._token)}"
+            msg=f"unexpected symbol '{self._token.value}'\n"
+            f"{self._lexer.get_trace(self._token)}"
         )
 
     def _skip_eol(self) -> PreprocessorToken:
@@ -430,8 +449,8 @@ class Preprocessor:
 
             else:
                 self.error(
-                        msg=f"unexpected symbol '{self._token.value}'\n"
-                            f"{self._lexer.get_trace(self._token)}"
+                    msg=f"unexpected symbol '{self._token.value}'\n"
+                    f"{self._lexer.get_trace(self._token)}"
                 )
 
             if self._token.type == TokenType.EOL:
@@ -527,7 +546,6 @@ class TextProcessor(NodeVisitor):
             return -1, ""
 
     def _process(self, symbols: SymbolsScope) -> None:
-        print(self._preproc.reader)
         code = self._preproc.reader.code_lines()
         code_pos, self._code = self._next_line(code)
 
@@ -581,12 +599,27 @@ class TextProcessor(NodeVisitor):
                     self._pos += 1
 
                 symbol = "".join(symb)
-                replacement = symbols.get(symbol)
-                if replacement is None:
-                    self.error(msg=f"symbol '{symbol}' not resolved")
 
-                code_line = replacement.replace("\n", "").strip()
-                return code.replace(symbol, code_line)
+                pos = self._pos - len(symbol)
+                replacement: str = symbols.get(symbol)
+
+                if replacement is None:
+                    # skip non macro symbols
+                    return ""
+
+                if replacement.startswith("[") or replacement.startswith("{"):
+                    code_line = replacement.replace("\n", "").strip()
+
+                    # avoid leak if we got {} as a value - it will break f
+                    # string
+                    return "".join([code[:pos], code_line, ";\n"])
+
+                elif len(replacement) > 0 and replacement[0].isdigit():
+                    # handle as numeric
+                    return f"{code[:pos]}{replacement};\n"
+
+                normalized = replacement.replace('"', "'").replace("\n", "").strip()
+                return f'{code[:pos]}"{normalized}";\n'
 
             self._pos += 1
 
