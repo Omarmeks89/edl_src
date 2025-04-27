@@ -8,6 +8,7 @@ from typing import Mapping, NoReturn, Any, Generator, Optional
 
 from .code_reader import CodeReader
 from .exceptions import PreprocessorError
+from .stree import stree, ndef
 
 
 class TokenType(StrEnum):
@@ -249,7 +250,8 @@ class Lexer:
                 file_name=self._reader_obj.name,
             )
             self.error(
-                    msg=f"not numerical symbol '{numeric[-1]}'\n\n{self.get_trace(t)}"
+                    msg=f"not numerical symbol "
+                        f"'{numeric[-1]}'\n\n{self.get_trace(t)}"
             )
 
         numeric = "".join(symbols)
@@ -338,13 +340,6 @@ class Loader:
             return file.read()
 
 
-class init:
-    """specific class for mark defined preprocessor symbols"""
-
-    def __repr__(self) -> str:
-        return "defined"
-
-
 class Directive:
 
     def handle(self, visitor: Any) -> Any:
@@ -357,7 +352,11 @@ class Directive:
 class DefineDirective(Directive):
 
     def __init__(
-        self, token: PreprocessorToken, code_line: str, *, value: Any | None = None
+            self,
+            token: PreprocessorToken,
+            code_line: str,
+            *,
+            value: Any | None = None,
     ) -> None:
         self.token = token
         self.code = code_line
@@ -374,16 +373,16 @@ class UploadDirective(Directive):
         self.path = path
 
 
-class SymbolsScope(dict):
-
-    def __setitem__(self, symbol: str, data: Any) -> None:
-        s = super().get(symbol)
-        if s is not None:
-            self.error(msg=f"attempt redefine global symbol {symbol}")
-        super().__setitem__(symbol, data)
-
-    def error(self, *, msg: str = "") -> NoReturn:
-        raise NameError(msg)
+# class SymbolsScope(dict):
+#
+#     def __setitem__(self, symbol: str, data: Any) -> None:
+#         s = super().get(symbol)
+#         if s is not None:
+#             self.error(msg=f"attempt redefine global symbol {symbol}")
+#         super().__setitem__(symbol, data)
+#
+#     def error(self, *, msg: str = "") -> NoReturn:
+#         raise NameError(msg)
 
 
 class Preprocessor:
@@ -399,7 +398,8 @@ class Preprocessor:
         except StopIteration:
             self.error(msg="unexpected EOF")
 
-        self._scope = SymbolsScope()
+        # create stree to store symbols
+        self._scope = stree()
 
     @property
     def reader(self) -> CodeReader:
@@ -429,8 +429,9 @@ class Preprocessor:
         """clear all preprocessed context"""
         self._scope = None
 
-    def preprocess(self) -> SymbolsScope:
+    def preprocess(self) -> stree:
         self.directive()
+        print(self._scope)
         return self._scope
 
     def directive(self) -> None:
@@ -463,7 +464,8 @@ class Preprocessor:
         self.eat(TokenType.UPLOAD)
         token = self.param()
         symbol = self.symbol()
-        self._scope[symbol.value] = token.value
+
+        self._scope.add(symbol.value, token.value)
         return self._token
 
     def define(self) -> PreprocessorToken:
@@ -473,16 +475,17 @@ class Preprocessor:
         symbol = self.symbol()
 
         if self._token.type == TokenType.VALUE:
-            self._scope[symbol.value] = self.value().value
+            self._scope.add(symbol.value, self.value().value)
 
         elif self._token.type == TokenType.PARAMETER:
-            self._scope[symbol.value] = self.param().value
+            # parameter means any string literal
+            self._scope.add(symbol.value, self.param().value)
 
         else:
             # means no value or parameter after define,
             # we define only symbol
             # do not eat, next token have to be EOL
-            self._scope[symbol.value] = init()
+            self._scope.add(symbol.value, ndef())
 
         return self._token
 
@@ -547,109 +550,109 @@ class TextProcessor(NodeVisitor):
         except StopIteration:
             return -1, ""
 
-    def _process(self, symbols: SymbolsScope) -> None:
+    def _process(self, symbols: stree) -> None:
         code = self._preproc.reader.code_lines()
         code_pos, self._code = self._next_line(code)
 
         while self._pos < len(self._code):
-            if self._code[self._pos] == "#":
-                code_pos, self._code = self._next_line(code)
-                self._pos = 0
-                continue
-
-            elif self._code[self._pos] == "$":
-                # we have found var declaration
-                data = self._substitute(self._code, symbols)
-                if data != "":
-                    self._preproc.reader.replace(code_pos, data)
-                code_pos, self._code = self._next_line(code)
-                self._pos = 0
-                continue
-
-            elif self._code[self._pos] in ("'", '"', "/"):
-                self._skip(code, self._code[self._pos])
-                code_pos, self._code = self._next_line(code)
-                self._pos = 0
-                continue
-
-            elif (self._pos + 1) >= len(self._code):
-                code_pos, self._code = self._next_line(code)
-                self._pos = 0
-                continue
+            # if self._code[self._pos] == "#":
+            #     code_pos, self._code = self._next_line(code)
+            #     self._pos = 0
+            #     continue
+            #
+            # elif self._code[self._pos] == "$":
+            #     # we have found var declaration
+            #     data = self._substitute(self._code, symbols)
+            #     if data != "":
+            #         self._preproc.reader.replace(code_pos, data)
+            #     code_pos, self._code = self._next_line(code)
+            #     self._pos = 0
+            #     continue
+            #
+            # elif self._code[self._pos] in ("'", '"', "/"):
+            #     self._skip(code, self._code[self._pos])
+            #     code_pos, self._code = self._next_line(code)
+            #     self._pos = 0
+            #     continue
+            #
+            # elif (self._pos + 1) >= len(self._code):
+            #     code_pos, self._code = self._next_line(code)
+            #     self._pos = 0
+            #     continue
 
             self._pos += 1
 
         self._pos = 0
 
-    def _substitute(self, code: str, symbols: SymbolsScope) -> str:
-        symb: list[str] = []
-        self._pos += 1
-
-        while self._pos < len(code):
-            if code[self._pos] == "=":
-                while self._pos < len(code):
-                    if (
-                        code[self._pos].isalpha()
-                        or code[self._pos].isdigit()
-                        or code[self._pos] == "_"
-                    ):
-                        symb.append(code[self._pos])
-
-                    elif code[self._pos] == ";":
-                        break
-
-                    self._pos += 1
-
-                symbol = "".join(symb)
-
-                pos = self._pos - len(symbol)
-                replacement: str = symbols.get(symbol)
-
-                if replacement is None:
-                    # skip non macro symbols
-                    return ""
-
-                if replacement.startswith("[") or replacement.startswith("{"):
-                    code_line = replacement.replace("\n", "").strip()
-
-                    # avoid leak if we got {} as a value - it will break f
-                    # string
-                    return "".join([code[:pos], code_line, ";\n"])
-
-                elif len(replacement) > 0 and replacement[0].isdigit():
-                    # handle as numeric
-                    return f"{code[:pos]}{replacement};\n"
-
-                normalized = replacement.replace('"', "'").replace("\n", "").strip()
-                return f'{code[:pos]}"{normalized}";\n'
-
-            self._pos += 1
-
-        # nothing was found
-        return ""
-
-    def _skip(self, code: Generator[tuple[int, str], None, None], to: str) -> None:
-        self._pos += 1
-        while self._pos < len(self._code) and self._code[self._pos] != to:
-            if self._code[self._pos] in ("'", '"'):
-                self._skip(code, self._code[self._pos])
-                continue
-
-            elif self._code[self._pos] == "\n":
-                _, self._code = self._next_line(code)
-                self._pos = 0
-                continue
-
-            self._pos += 1
-
-        if self._pos >= len(self._code):
-            return
-
-        if self._code[self._pos] != to:
-            # code may end
-            self.error(msg=f"symbol <{to}> is not closed")
-
-        self._pos += 1
+    # def _substitute(self, code: str, symbols: SymbolsScope) -> str:
+    #     symb: list[str] = []
+    #     self._pos += 1
+    #
+    #     while self._pos < len(code):
+    #         if code[self._pos] == "=":
+    #             while self._pos < len(code):
+    #                 if (
+    #                     code[self._pos].isalpha()
+    #                     or code[self._pos].isdigit()
+    #                     or code[self._pos] == "_"
+    #                 ):
+    #                     symb.append(code[self._pos])
+    #
+    #                 elif code[self._pos] == ";":
+    #                     break
+    #
+    #                 self._pos += 1
+    #
+    #             symbol = "".join(symb)
+    #
+    #             pos = self._pos - len(symbol)
+    #             replacement: str = symbols.get(symbol)
+    #
+    #             if replacement is None:
+    #                 # skip non macro symbols
+    #                 return ""
+    #
+    #             if replacement.startswith("[") or replacement.startswith("{"):
+    #                 code_line = replacement.replace("\n", "").strip()
+    #
+    #                 # avoid leak if we got {} as a value - it will break f
+    #                 # string
+    #                 return "".join([code[:pos], code_line, ";\n"])
+    #
+    #             elif len(replacement) > 0 and replacement[0].isdigit():
+    #                 # handle as numeric
+    #                 return f"{code[:pos]}{replacement};\n"
+    #
+    #             normalized = replacement.replace('"', "'").replace("\n", "").strip()
+    #             return f'{code[:pos]}"{normalized}";\n'
+    #
+    #         self._pos += 1
+    #
+    #     # nothing was found
+    #     return ""
+    #
+    # def _skip(self, code: Generator[tuple[int, str], None, None], to: str) -> None:
+    #     self._pos += 1
+    #     while self._pos < len(self._code) and self._code[self._pos] != to:
+    #         if self._code[self._pos] in ("'", '"'):
+    #             self._skip(code, self._code[self._pos])
+    #             continue
+    #
+    #         elif self._code[self._pos] == "\n":
+    #             _, self._code = self._next_line(code)
+    #             self._pos = 0
+    #             continue
+    #
+    #         self._pos += 1
+    #
+    #     if self._pos >= len(self._code):
+    #         return
+    #
+    #     if self._code[self._pos] != to:
+    #         # code may end
+    #         self.error(msg=f"symbol <{to}> is not closed")
+    #
+    #     self._pos += 1
 
     def dump(self, fullpath: str) -> None:
         self._preproc.reader.dump(fullpath)

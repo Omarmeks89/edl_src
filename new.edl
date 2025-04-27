@@ -1,0 +1,17 @@
+
+/ comment
+    multiline comment /
+
+/ jfjfjf /
+
+# define DATA 'data'
+#define NUM 123
+#define float_data 123.00001
+
+$data: str = DATA;
+
+# define SYMBOL
+
+$var: int = NUM;
+
+$varx: float = float_data;
