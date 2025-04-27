@@ -1,4 +1,3 @@
-import pathlib
 from typing import Generator
 
 from src.exceptions import TranslatorError
@@ -9,10 +8,8 @@ class CodeReader:
 
     def __init__(self, f_name: str) -> None:
         self._f_name = f_name
-        if not pathlib.Path(self._f_name).exists():
-            raise TranslatorError(f"path {pathlib.Path(self._f_name)} not exists")
-
         self._lines: list[str] = []
+        self._cache: list[str] = []
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(file={self._f_name}, lines={self._lines})"
@@ -21,18 +18,30 @@ class CodeReader:
     def name(self) -> str:
         return self._f_name
 
+    @property
+    def code(self) -> list[str]:
+        return self._lines
+
     def reader(
         self,
         *,
         mode: str = "r",
         encoding: str = "utf-8",
     ) -> Generator[None, None, str]:
-        with open(self._f_name, mode=mode, encoding=encoding) as file:
-            for line in file.readlines():
+        if len(self._cache) == 0:
+            with open(self._f_name, mode=mode, encoding=encoding) as file:
+                for line in file.readlines():
+                    yield line
+
+        else:
+            for line in self._cache:
                 yield line
 
     def write_line(self, line: str) -> None:
         self._lines.append(line)
+
+    def set_cache(self, lines: list[str]) -> None:
+        self._cache = lines
 
     def code_lines(self) -> Generator[tuple[int, str], None, None]:
         if len(self._lines) == 0:
@@ -59,7 +68,7 @@ class CodeReader:
 
     def replace(self, pos: int, line: str) -> None:
         if pos >= len(self._lines):
-            raise TranslatorError(f"code line <{line}> out of range")
+            raise TranslatorError(f"code line <{line!r}> out of range\n")
 
         self._lines[pos] = line
 
@@ -70,4 +79,5 @@ class CodeReader:
 
     def clear(self) -> None:
         self._lines.clear()
+        self._cache.clear()
         self._f_name = ""

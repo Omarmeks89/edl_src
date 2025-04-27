@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Any, Optional
 
 from src.exceptions import TranslatorRuntimeError
@@ -457,7 +457,7 @@ class Value(AstNode):
         return self._unary is not None
 
     def visit(self, visitor: Any) -> Any:
-        visitor.value(self)
+        visitor.numeric(self)
 
 
 class ArrayValue(AstNode):

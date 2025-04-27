@@ -1,4 +1,5 @@
 """Module contains data struct for resolve macro symbols O(n) runtime"""
+
 from typing import Any
 
 from src.exceptions import PreprocessorError
@@ -19,7 +20,9 @@ class _streeNode:
         self.next: dict[str, _streeNode] = {}
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(s={self.symbol}, v={self.value}, next={self.next})"
+        return (
+            f"{type(self).__name__}(s={self.symbol}, v={self.value}, next={self.next})"
+        )
 
     def __contains__(self, item: str) -> bool:
         return item in self.next
@@ -60,9 +63,7 @@ class stree:
         # anyway we got snode not None
         if snode.value is not None:
             # attempt to redefine registered symbol
-            raise PreprocessorError(
-                    f"attempt to redefine existing symbol '{sym}'"
-            )
+            raise PreprocessorError(f"attempt to redefine existing symbol '{sym}'")
 
         snode.value = val
         return None

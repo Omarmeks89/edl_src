@@ -588,7 +588,7 @@ class ContextResolver:
         """generator, that doesn`t return anything, only set ctx"""
 
         # now waiting [[str:6, int:2]..]
-        values = (v.value for v in self._value_src.value)
+        values = (v.numeric for v in self._value_src.numeric)
         for value in values:
             if len(value) != len(self._keys):
                 raise TranslatorDirectiveError(
