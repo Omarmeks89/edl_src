@@ -15,9 +15,7 @@ class TokenType(StrEnum):
     START_MACRO: str = "START_MACRO"
     UPLOAD: str = "UPLOAD"
     DEFINE: str = "DEFINE"
-    # PARAMETER: str = "PARAMETER"
     SYMBOL: str = "SYMBOL"
-    # VALUE: str = "VALUE"
     LITERAL: str = "LITERAL"
     NUMERIC: str = "NUMERIC"
     EOL: str = "EOL"
@@ -430,8 +428,6 @@ class Preprocessor:
     def preprocess(self) -> list[Directive]:
         """Provide all parsed directives for preprocessor"""
         self.directive()
-        for directive in self._scope:
-            print(directive)
         return self._scope
 
     def directive(self) -> None:
