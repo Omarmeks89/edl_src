@@ -1,6 +1,6 @@
 $var: str = "var";
 
-# define EXECUTOR 'any_valid'
+# define EXECUTOR "aaa"
 
 оборудование класс_а Шкаф_115 {
     Идентификатор: int = 105117;
