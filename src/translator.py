@@ -1,1185 +1,743 @@
-"""translator implementation"""
+"""
+проход визитора готовит данные и генераторы для их
+обработки (если есть контексты) или запускает сборщика
+если контекстов нет.
 
-from typing import Mapping, Optional, Generator, NoReturn
+Те на каждую итерацию контекста создается один объекст, который
+берет из него данные.
+"""
 
-from src.ast import (
-    AstNode,
+import weakref
+from typing import Mapping, Any, Optional, Generator
+
+from src.finalizer import BaseFinalizer
+from src._ast import (
     Module,
-    Object,
-    Template,
     Context,
-    Signal,
-    SignalDirection,
-    SignalType,
-    ObjectType,
-    UseDirective,
-    UseMethod,
-    UseVals,
-    Value,
-    Var,
-    UseDirectiveFilter,
-    UseDest,
-    PutDirective,
-    PutRule,
-    PutIn,
-    PutFrom,
+    Template,
+    Object,
     Connection,
+    Signal,
     VarDeclaration,
-    DynamicVarName,
-    VarAssign,
-    _T,
-    ArrayValue,
-    TildaValue,
-    Range,
-    Parameter,
     ParamDeclaration,
+    VarAssign,
     ParameterAssign,
-    SystemConstValue,
     ParameterOption,
     _ArrT,
+    PutDirective,
+    PutRule,
+    UseDirective,
+    Range,
+    Var,
+    Value,
+    ArrayValue,
+    AstNode,
     BindDirective,
+    DynamicVarName,
+    TildaValue,
 )
-from src.code_reader import CodeReader
-from src.exceptions import TranslatorError
-from src.tokens import TranslatorToken, Token
+from src.adt import (
+    EquipmentId,
+    AbstractDataTable,
+    ContextScope,
+    ModuleScope,
+    TemplateScope,
+    VarSymbol,
+    EquipmentTable,
+    ConnectionTable,
+    SignalTable,
+    Symbol,
+    ParamSymbol,
+    _NotInit,
+    SignalParamId,
+    SignalEquipId,
+    SignalValue,
+    SignalFormula,
+    SignalBaseDescription,
+    SignalFormat,
+    SignalAck,
+    SignalUnits,
+    SignalPersistent,
+    ConnectionId,
+    ConnectionAddress,
+)
+from src.exceptions import (
+    TranslatorTypeError,
+    TranslatorRuntimeError,
+    TranslatorDirectiveError,
+)
+from src.tokens import TranslatorToken
+from src.parser import Parser
+from src.symbols_graph import orgnode
 
-# recursion depth limit
-TYPE_MATCHING_LIMIT: int = 100
 
+class AdtBuilder:
+    """part of compiler that build ADT tables"""
 
-class Tokenizer:
-    """tokenizer (Lexer) for code interpreter.
-    Some methods are same as Preprocessor Lexer (inheritance?)
-    """
-
-    _reserved_keywords: Mapping[str, Token] = {
-        "оборудование": Token("оборудование", TranslatorToken.OBJ_CLASS),
-        "класс_а": Token("аналог", TranslatorToken.OBJ_TYPE),
-        "класс_ц": Token("цифра", TranslatorToken.OBJ_TYPE),
-        "шаблон": Token("шаблон", TranslatorToken.TEMPL_KW),
-        "контекст": Token("контекст", TranslatorToken.CTX_KW),
-        "соединение": Token("соединение", TranslatorToken.CONN_KW),
-        "обработчик": Token("обработчик", TranslatorToken.CONN_OPT),
-        "сигнал": Token("сигнал", TranslatorToken.SIGN_KW),
-        # add sign opt
-        "статус": Token("статус", TranslatorToken.SIGN_OPT),
-        "важность": Token("важность", TranslatorToken.SIGN_OPT),
-        "отображать": Token("отображать", TranslatorToken.SIGN_OPT),
-        "метка": Token("метка", TranslatorToken.SIGN_OPT),
-        "входной": Token("входной", TranslatorToken.SIGN_DIRECT),
-        "выходной": Token("выходной", TranslatorToken.SIGN_DIRECT),
-        "аналог": Token("аналог", TranslatorToken.SIGN_TYPE),
-        "дискрет": Token("дискрет", TranslatorToken.SIGN_TYPE),
-        "использовать": Token("использовать", TranslatorToken.USE_KW),
-        "линейно": Token("линейно", TranslatorToken.USE_METHOD),
-        "значения": Token("значения", TranslatorToken.VALS_KW),
-        "кроме": Token("кроме", TranslatorToken.EXCL_KV),
-        "все": Token("все", TranslatorToken.ALL),
-        "подстановка": Token("подстановка", TranslatorToken.PUT_KW),
-        "правило": Token("правило", TranslatorToken.RULE_KW),
-        "в": Token("в", TranslatorToken.IN),
-        "из": Token("из", TranslatorToken.FROM),
-        "str": Token("str", TranslatorToken.STR_CONST),
-        "int": Token("int", TranslatorToken.INT_CONST),
-        "float": Token("float", TranslatorToken.FLOAT_CONST),
-        "bool": Token("bool", TranslatorToken.BOOL_CONST),
-        "arr": Token("ARR", TranslatorToken.ARRAY_CONST),
-        "Да": Token("Да", TranslatorToken.BOOL),
-        "Нет": Token("Нет", TranslatorToken.BOOL),
-        "диапазон": Token("диапазон", TranslatorToken.RANGE_KW),
-        "i": Token("<i>", TranslatorToken.IT),
-        "норма": Token("норма", TranslatorToken.S_CONST),
-        "авария": Token("авария", TranslatorToken.S_CONST),
-        "тревога": Token("тревога", TranslatorToken.S_CONST),
-        "привязать": Token("привязать", TranslatorToken.BIND_KW),
-        "параметр": Token("параметр", TranslatorToken.SIGN_OPT),
-    }
-
-    def __init__(self) -> None:
-        self._reader: Optional[Generator[None, None, str]] = None
-        self._code: str = ""
-        self._pos: int = 0
-        self._line_pos: int = 0
-
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}(code={self._code})"
-
-    def set_reader(self, reader: CodeReader) -> None:
-        self._reader = reader.read_preprocessed()
-
-    def get_trace(self) -> str:
-        if self._code == "":
-            return "no trace"
-
-        symbols = ["-" for _ in range(self._pos)]
-        symbols.append("^")
-        code_ptr = "".join(symbols)
-        code = self._code
-        return (
-            f"{code[:-1]}\n{code_ptr}\n(pos=<{self._pos}>, "
-            f"symbol=<{self._code[self._pos]!r}>, "
-            f"line=<{self._line_pos}>)"
-        )
-
-    def _set_new_line(self):
-        self._code: str = next(self._reader)
-        if self._pos != 0:
-            self._pos = 0
-        self._line_pos += 1
-
-    def _skip(self, to: str) -> None:
-        """inside a comment we may have string like './path' so we
-        should handle (skip) all kind or parentheses to.
-        """
-        self._pos += 1
-        while self._pos < len(self._code) and self._code[self._pos] != to:
-            if self._code[self._pos] in ("'", '"'):
-                self._skip(self._code[self._pos])
-                continue
-
-            elif self._code[self._pos] == "\n":
-                self._set_new_line()
-                continue
-
-            self._pos += 1
-
-        if self._pos >= len(self._code):
-            return
-
-        if self._code[self._pos] != to:
-            self.error(msg=f"symbol <{to}> is not closed")
-        self._pos += 1
-
-    def get_next_token(self) -> Generator[None, None, Token]:
-        if self._reader is None:
-            self.error(msg="code reader not set")
-
-        self._set_new_line()
-        self._code: str
-
-        while self._pos < len(self._code):
-            if self._code[self._pos] == "$":
-                self._pos += 1
-                yield Token("$", TranslatorToken.VAR_SYMB)
-
-            elif self._code[self._pos] in (" ", "\t"):
-                self._pos += 1
-
-            elif self._code[self._pos] == "~":
-                self._pos += 1
-                yield Token("~", TranslatorToken.TILDA)
-
-            elif self._code[self._pos] == "\n":
-                try:
-                    self._set_new_line()
-                except StopIteration:
-                    break
-
-            # skip preprocessor directives
-            elif self._code[self._pos] == "#":
-                try:
-                    self._set_new_line()
-                except StopIteration:
-                    break
-
-            elif self._code[self._pos] == ".":
-                # maybe ellipsis?
-                if self.is_ellipsis(self._code, self._pos):
-                    self._pos += 2
-                    yield Token("..", TranslatorToken.ELLIPSIS)
-                else:
-                    self._pos += 1
-                    yield Token(".", TranslatorToken.POINT)
-
-            elif self._code[self._pos] == ";":
-                self._pos += 1
-                yield Token(";", TranslatorToken.SEMICOLON)
-
-            elif self._code[self._pos] == ":":
-                self._pos += 1
-                yield Token(":", TranslatorToken.COLON)
-
-            elif self._code[self._pos] == ",":
-                self._pos += 1
-                yield Token(",", TranslatorToken.COMMA)
-
-            elif self._code[self._pos] == "+":
-                self._pos += 1
-                yield Token("+", TranslatorToken.CONCAT)
-
-            elif self._code[self._pos] == "-":
-                self._pos += 1
-                yield Token("-", TranslatorToken.MINUS)
-
-            elif self._code[self._pos] == "=":
-                self._pos += 1
-                yield Token("=", TranslatorToken.ASSIGN)
-
-            elif self._code[self._pos] == "{":
-                self._pos += 1
-                yield Token("{", TranslatorToken.FP_OP)
-
-            elif self._code[self._pos] == "}":
-                self._pos += 1
-                yield Token("}", TranslatorToken.FP_CL)
-
-            elif self._code[self._pos] == "[":
-                self._pos += 1
-                yield Token("[", TranslatorToken.SP_OP)
-
-            elif self._code[self._pos] == "]":
-                self._pos += 1
-                yield Token("]", TranslatorToken.SP_CL)
-
-            elif self._code[self._pos] == "(":
-                self._pos += 1
-                yield Token("(", TranslatorToken.RP_OP)
-
-            elif self._code[self._pos] == ")":
-                self._pos += 1
-                yield Token(")", TranslatorToken.RP_CL)
-
-            elif self._code[self._pos] == "<":
-                if self.is_junc():
-                    yield Token("<-", TranslatorToken.JUNC)
-                else:
-                    self.error(msg=f"unexpected symbol.\ntrace:\n{self.get_trace()}")
-
-            elif self._code[self._pos].isalpha():
-                # ID
-                yield self.match_symbol(self._code)
-
-            elif self._code[self._pos].isdigit():
-                # int | float
-                yield self.match_number(self._code)
-
-            elif self._code[self._pos] == "/":
-                # comment
-                self._skip(self._code[self._pos])
-
-            elif self._code[self._pos] in ("'", '"'):
-                # str
-                yield self.match_literal(self._code, self._code[self._pos])
-
-            else:
-                self.error(msg=f"unexpected symbol.\ntrace:\n{self.get_trace()}")
-
-        yield Token("EOF", TranslatorToken.EOF)
-
-    def is_junc(self) -> bool:
-        if (self._pos + 1) < len(self._code) and self._code[self._pos + 1] == "-":
-            self._pos += 2
-            return True
-        return False
-
-    def match_array(self, code: str) -> tuple[Token | None, bool]:
-        ptr_pos = self._pos
-        if self._match_array(code):
-            return Token("ARRAY", TranslatorToken.ARRAY_CONST), True
-        # reset cursor position to start
-        self._pos = ptr_pos
-        return None, False
-
-    def _match_array(
+    def __init__(
         self,
-        code: str,
+        parser: Parser,
+        macro_sym_table: dict[str, weakref.ref[orgnode]],
+    ) -> None:
+        self._parser = parser
+        self._macro_sym_table = macro_sym_table
+        self._curr_scope: Optional[AbstractDataTable] = None
+        self._scopes: Mapping[str, AbstractDataTable] = {}
+
+        # use for next resolving and compilation stage
+        # directive use is owner here
+        self._ctx_listeners: Mapping[str, list[AbstractDataTable]] = {}
+        self._ctx_resolvers: Mapping[str, ContextResolver] = {}
+
+        self._type_matcher = TypeMatcher()
+
+    def run(
+        self,
+        translator: BaseFinalizer,
         *,
-        depth: Optional[int] = None,
-    ) -> bool:
-        _d = depth
-        if _d is not None and _d > TYPE_MATCHING_LIMIT:
-            self.error(
-                msg=f"type matching depth limit {_d}.\ntrace:\n{self.get_trace()}"
+        resolve_context: bool = True,
+    ) -> BaseFinalizer:
+        # ADT building stage
+        module = self._parser.translate()
+        module.visit(self)
+
+        # for k, v in self._macro_sym_table.items():
+        #     print(k, v())
+
+        # translation stage (using ADT)
+        # context resolving
+        if resolve_context:
+            # some dialects don`t need contexts
+            to_del = []
+            for r in self._ctx_resolvers.values():
+                ctx_name = r.get_ctx_name()
+                for _ in r.get_resolver():
+                    listeners = self._ctx_listeners.get(ctx_name)
+                    if listeners is None:
+                        continue
+
+                    for listener in listeners:
+                        listener.visit(translator)
+                        to_del.append(listener.name)
+
+                if ctx_name in self._ctx_listeners:
+                    # current context is resolved
+                    del self._ctx_listeners[ctx_name]
+
+            for d in to_del:
+                if d in self._scopes:
+                    del self._scopes[d]
+
+        for k, v in self._scopes.items():
+            v.visit(translator)
+
+        return translator
+
+    def module(self, m: Module) -> None:
+        scope = self._scopes.get(m.name)
+        if scope is None:
+            module_scope = ModuleScope(m.name, m.node_type)
+            self._scopes[m.name] = module_scope
+            self._curr_scope = module_scope
+
+        for var in m.get_vars():
+            var.visit(self)
+
+        for d in m.get_directives():
+            d.visit(self)
+
+        for block in m.get_blocks():
+            block.visit(self)
+
+        self._curr_scope = None
+
+    def context(self, ctx: Context) -> None:
+        # declare context into current scope
+        # declare vars and push them into the scope
+        if not isinstance(self._curr_scope, TemplateScope):
+            raise TranslatorTypeError(f"context not allowed in {self._curr_scope}")
+
+        ctx_scope = ContextScope(ctx.name)
+        # print(f"handle context {ctx.name} inside scope {self._curr_scope.name}")
+        self._curr_scope.set_context(ctx.name, ctx_scope)
+        templ_scope = self._curr_scope
+
+        # redefine scope temporary
+        self._curr_scope = ctx_scope
+        for v in ctx.get_vars():
+            v.visit(self)
+
+        self._curr_scope = templ_scope
+
+    def template(self, t: Template) -> None:
+        enclosed_scope = self._curr_scope
+        template = self._scopes.get(t.name)
+        if template is None:
+            template = TemplateScope(t.name, t.node_type, enclosed_scope=enclosed_scope)
+            self._scopes[t.name] = template
+            self._curr_scope = template
+
+        for ctx in t.get_contexts():
+            ctx.visit(self)
+
+        for var in t.get_vars():
+            var.visit(self)
+
+        for d in t.get_directives():
+            d.visit(self)
+
+        for p in t.get_params():
+            p.visit(self)
+
+        for conn in t.get_connections():
+            conn.visit(self)
+
+        for block in t.get_blocks():
+            block.visit(self)
+
+        self._curr_scope = enclosed_scope
+
+    def object(self, o: Object) -> None:
+        enclosed_scope = self._curr_scope
+        eq_scope = self._scopes.get(o.name)
+        if eq_scope is None:
+            eq_scope = EquipmentTable(
+                o.name,
+                o.node_type,
+                o.obj_type,
+                enclosed_scope=enclosed_scope,
+            )
+            n_ext = o.get_name_extensions()
+            for n in n_ext:
+                if self._curr_scope.lookup(n.name):
+                    continue
+                raise TranslatorRuntimeError(f"'{n.name}' not found for dynamic name")
+
+            eq_scope.set_name_extensions(n_ext)
+            self._scopes[o.name] = eq_scope
+            self._curr_scope = eq_scope
+
+        for var in o.get_vars():
+            var.visit(self)
+
+        for d in o.get_directives():
+            d.visit(self)
+
+        for p in o.get_params():
+            p.visit(self)
+
+        for conn in o.get_connections():
+            conn.visit(self)
+
+        for block in o.get_blocks():
+            block.visit(self)
+
+        self._curr_scope = enclosed_scope
+
+    def connection(self, c: Connection) -> None:
+        # TODO add full name for valid object registration
+        init_conn: bool = True
+        enclosed_scope = self._curr_scope
+
+        # resolve name at first
+        n_ext = c.get_name_extensions()
+        r_symbols = []
+        for n in n_ext:
+            resolving = self._curr_scope.lookup(n.name)
+            if resolving is None:
+                raise TranslatorRuntimeError(f"'{n.name}' not found for dynamic name")
+            if resolving.value is None:
+                raise TranslatorRuntimeError(
+                    f"context symbol '{resolving.name}' not allowed"
+                )
+            r_symbols.append(resolving.value)
+
+        c_name = f"{c.name}{''.join([f'{name}' for name in r_symbols])}"
+
+        conn = self._scopes.get(c_name)
+        if conn is None:
+            init_conn = False
+            conn = ConnectionTable(c.name, c.node_type, enclosed_scope=enclosed_scope)
+            conn.set_name(c_name)
+
+        self._curr_scope.declare(c_name, conn)
+        self._scopes[c_name] = conn
+        self._curr_scope = conn
+
+        if not init_conn:
+            for var in c.get_vars():
+                var.visit(self)
+
+            for d in c.get_directives():
+                d.visit(self)
+
+            for p in c.get_params():
+                p.visit(self)
+
+        self._curr_scope = enclosed_scope
+
+    def dynamic_name(self, dn: DynamicVarName) -> None:
+        # TODO: in var_assign only!
+        pass
+
+    def signal(self, s: Signal) -> None:
+        enclosed_scope = self._curr_scope
+        signal_scope = self._scopes.get(s.name)
+
+        if signal_scope is None:
+            signal_scope = SignalTable(
+                s.name,
+                s.node_type,
+                s.sig_type,
+                s.direction,
+                enclosed_scope=enclosed_scope,
             )
 
-        if _d is None:
-            _d = 1
+            # =====
+            # we can`t resolve names here because context is
+            # not resolved at the moment, and we lost wished
+            # symbols order
+            #
+            # so we collect var names to resolve at finalizer stage
+            # =====
 
-        self._pos += 1
-        is_array: bool = True
-        ellipsis_possible: bool = True
-        comma_possible: bool = True
+            n_ext = s.get_name_extensions()
+            r_symbols = []
+            for n in n_ext:
+                r_symbol = self._curr_scope.lookup(n.name)
+                if r_symbol is None:
+                    raise TranslatorRuntimeError(f"var '{n.name}' not exists")
 
-        while self._pos < len(code) and is_array:
-            if code[self._pos] == "[":
-                is_array = self._match_array(code, depth=_d + 1)
-                self._pos += 1
+                # context is not resolved at the moment
+                r_symbols.append(r_symbol)
 
-            elif code[self._pos] == "]":
-                return is_array
+            # we add names that are not resolved (from ctx) at the moment
+            # to resolve them later
+            signal_scope.set_name_extensions(r_symbols)
 
-            elif code[self._pos].isalpha():
-                is_array = self._match_type(code)
+            # remove sig_name as not resolved
+            self._scopes[s.name] = signal_scope
+            self._curr_scope = signal_scope
 
-            elif code[self._pos] == "." and ellipsis_possible:
-                if code[self._pos - 1] not in (" ", ",") and self.is_ellipsis(
-                    code, self._pos
-                ):
-                    # comma is impossible if we found ellipsis
-                    comma_possible = False
-                    self._pos += 2
-                    continue
-                is_array = False
+        for var in s.get_vars():
+            var.visit(self)
 
-            elif code[self._pos] == "," and comma_possible:
-                self._pos += 1
+        for d in s.get_directives():
+            d.visit(self)
 
-            elif code[self._pos] == ":" and comma_possible:
-                self._pos += 1
-                try:
-                    st = self._pos
-                    self._skip_int(self._code)
-                    int(code[st : self._pos])
-                    comma_possible = False
-                except TypeError:
-                    is_array = False
+        for p in s.get_params():
+            p.visit(self)
 
-            elif code[self._pos] == " ":
-                self._pos += 1
+        conn = s.get_connection()
+        if conn is not None:
+            conn.visit(self)
 
-            else:
-                return False
-        return False
+        self._curr_scope = enclosed_scope
 
-    def _match_type(self, code: str) -> bool:
-        symbols: list[str] = []
-        while self._pos < len(code) and code[self._pos].isalpha():
-            symbols.append(code[self._pos])
-            self._pos += 1
+    def var_declaration(self, vd: VarDeclaration) -> None:
+        """return var name"""
+        # register all vars in current scope with type
+        t = vd.get_var_type()
+        for v in vd.get_vars():
+            # if var name declared raise error
+            # lookup all scopes
+            if self._curr_scope.lookup(v.name):
+                raise TranslatorRuntimeError(
+                    f"attempt to redefine registered var name '{v.name}'"
+                )
 
-        symb = "".join(symbols)
-        token = self._reserved_keywords.get(symb)
-        if token is None:
-            return False
-        return token.token_type in (
-            TranslatorToken.INT_CONST,
-            TranslatorToken.FLOAT_CONST,
-            TranslatorToken.BOOL_CONST,
-            TranslatorToken.STR_CONST,
-        )
+            var_symbol = VarSymbol(v.name, _type=t)
+            self._curr_scope.declare(var_symbol.name, var_symbol)
 
-    def match_symbol(self, code: str) -> Token:
-        """symbols - literals without brackets like LITERAL"""
-        symbols: list[str] = []
-        while self._pos < len(code):
-            if (
-                code[self._pos].isalpha()
-                or code[self._pos].isdigit()
-                or code[self._pos] == "_"
-            ):
-                symbols.append(code[self._pos])
-                self._pos += 1
+    def param_declaration(self, pd: ParamDeclaration) -> None:
+        # register parameter in current scope with type
+        p = pd.get_param()
+        sig_par = None
+        if self._curr_scope.scope_type == TranslatorToken.SIGNAL:
+            if p.name == "Идентификатор":
+                sig_par = SignalParamId(p.name, _type=pd.get_param_type())
+
+            elif p.name == "Оборудование":
+                sig_par = SignalEquipId(p.name, _type=pd.get_param_type())
+
+            elif p.name == "Значение":
+                sig_par = SignalValue(p.name, _type=pd.get_param_type())
+
+            elif p.name == "Формула":
+                sig_par = SignalFormula(p.name, _type=pd.get_param_type())
+
+            elif p.name in ("Описание0", "Описание1", "Описание2", "Описание3"):
+                sig_par = SignalBaseDescription(p.name, _type=pd.get_param_type())
+
+            elif p.name == "Формат":
+                sig_par = SignalFormat(p.name, _type=pd.get_param_type())
+
+            elif p.name == "Квитируемый":
+                sig_par = SignalAck(p.name, _type=pd.get_param_type())
+
+            elif p.name == "Журналируемый":
+                sig_par = SignalPersistent(p.name, _type=pd.get_param_type())
+
+            elif p.name == "Единицы":
+                sig_par = SignalUnits(p.name, _type=pd.get_param_type())
+
+        elif self._curr_scope.scope_type == TranslatorToken.CONNECTION:
+            if p.name == "Идентификатор":
+                sig_par = ConnectionId(p.name, _type=pd.get_param_type())
+
+            elif p.name == "Адрес":
+                sig_par = ConnectionAddress(p.name, _type=pd.get_param_type())
+
+        elif self._curr_scope.scope_type == TranslatorToken.OBJECT:
+            if p.name == "Идентификатор":
+                sig_par = EquipmentId(p.name, _type=pd.get_param_type())
+
+        if sig_par is not None:
+            self._curr_scope.declare_parameter(sig_par.name, sig_par)
+
+    def var(self, v: Var) -> None:
+        """lookup in current scope or context only"""
+        if not self._curr_scope.lookup(v.name):
+            raise TranslatorRuntimeError(f"variable '{v.name}' not declared")
+
+    def var_assign(self, va: VarAssign) -> None:
+        # first check variable is declared in current scope
+        # check value type with var type
+        # declare variables
+        decl = va.get_vars_declaration()
+        value = va.get_value()
+
+        # check declared symbol (vor var_extract)
+        # call dynamic name
+        value.visit(self)
+
+        # declare current symbols
+        decl.visit(self)
+        for v in decl.get_vars():
+            v.visit(self)
+
+            declared = self._curr_scope.lookup(v.name, only_curr=True)
+            if declared is None:
+                raise TranslatorRuntimeError(f"variable {v.name} not found")
+
+            if value.node_type == TranslatorToken.ID:
+                # var name
+                _value = self._curr_scope.lookup(value.name)
+                if _value is None:
+                    raise TranslatorRuntimeError(f"symbol '{value.name}' not resolved")
+
+                value = _value
+
+            declared: VarSymbol
+            # check assigned value type
+            if not self._type_matcher.type_match(declared, value):
+                raise TranslatorTypeError(
+                    f"(var_assign) declared {declared.node_type} got {value.node_type}"
+                )
+
+            declared.set_value(value)
+
+            # ==========
+            # add resolved symbol into sym graph
+            root_sym_ptr = self._macro_sym_table.get(declared.name)
+            if root_sym_ptr is None:
+                return
+
+            root_sym = root_sym_ptr()
+            if root_sym is None:
+                raise TranslatorRuntimeError("broken symbols graph")
+
+            sym = root_sym.add(declared.name, "-")
+            self._curr_scope.set_symbol(declared.name, sym)
+            # ==========
+
+    def value(self, value: Value) -> None:
+        """handling value. Set unary (if unary)"""
+        pass
+
+    def array_value(self, arr: ArrayValue) -> None:
+        """handling array value"""
+        pass
+
+    def type_arr(self, ta: _ArrT) -> None:
+        pass
+
+    def parameter_assign(self, pa: ParameterAssign) -> None:
+        # check types
+        # check that options are possible
+        # declare parameter and add into json
+        par_value = pa.get_param_value()
+        par_value.visit(self)
+        pd: ParamDeclaration = pa.get_param_decl()
+
+        # declare parameter
+        pd.visit(self)
+        param_sym = pd.get_param()
+
+        declared = self._curr_scope._params.get(param_sym.name)
+        if declared is None:
+            raise TranslatorRuntimeError(f"parameter '{param_sym.name}' not declared")
+
+        for par in declared:
+            par: ParamSymbol
+            if par_value.node_type == TranslatorToken.ID:
+                # we use variable as a value container
+                node = self._curr_scope.lookup(par_value.name)
+                if node is None:
+                    raise TranslatorRuntimeError(
+                        f"variable '{par_value.name}' not initialized"
+                    )
+
+                if node.value is None:
+                    # mark node that wasn`t initialized
+                    par_value = _NotInit(node.name, _type=node._type)
+
+                # we`re expecting that values are resolved at the moment
+                else:
+                    # par_value = node.value
+                    par_value = node
+
+            if par.value is not None:
                 continue
-            break
 
-        s = "".join(symbols)
-        token = self._reserved_keywords.get(s)
-        if token is None:
-            # we think it is a new literal
-            return Token(s, TranslatorToken.ID)
-        return token
+            if not self._type_matcher.type_match(par, par_value):
+                raise TranslatorTypeError(
+                    f"'{self._curr_scope.name}': type mismatch for param '{par.name}' "
+                    f"(on assign var '{par_value.name}')\nexpected '{par.node_type}' got '{par_value.node_type}'\n"
+                    f"(check free var (or context var) '{par_value.name}' type)"
+                )
 
-    def match_number(self, code: str) -> Token:
-        pos = self._pos
-        while self._pos < len(code) and code[self._pos].isdigit():
-            self._pos += 1
+            par.set_value(par_value)
 
-        if self._pos < len(code) and code[self._pos] == ".":
-            self._pos += 1
-            while self._pos < len(code) and code[self._pos].isdigit():
-                self._pos += 1
+            # ==========
+            # register symbol in sym graph
+            root_sym_ptr = self._macro_sym_table.get(par.name)
+            if root_sym_ptr is not None:
+                root_sym = root_sym_ptr()
 
-            return Token(float(code[pos : self._pos]), TranslatorToken.FLOAT)
-        return Token(int(code[pos : self._pos]), TranslatorToken.INT)
+                if root_sym is None:
+                    raise TranslatorRuntimeError("broken symbols graph")
 
-    def _skip_int(self, code: str) -> None:
-        while self._pos < len(code) and code[self._pos].isdigit():
-            self._pos += 1
+                sym = root_sym.add(par.name, "-")
+                self._curr_scope.set_symbol(par.name, sym)
+            # ==========
 
-    def match_literal(self, code: str, to: str) -> Token:
-        st = self._pos
-        self._skip(to)
-        string = code[st + 1 : self._pos - 1]  # skip brackets
-        return Token(string, TranslatorToken.STR)
+            for opt in pa.get_options():
+                # collect options
+                # check option in builtins for current expression type
+                par.register_option(opt)
 
-    @staticmethod
-    def is_ellipsis(code: str, pos: int) -> bool:
-        if (pos + 1) > len(code):
-            return False
-        return True if code[pos + 1] == "." else False
+    def parameter_option(self, po: ParameterOption) -> None:
+        pass
 
-    def error(self, *, msg: str = "") -> NoReturn:
-        raise TranslatorError(msg)
+    def bind_directive(self, bd: BindDirective) -> None:
+        """bind to connection DataTable"""
 
+        # TODO: it should be registered into scope by full name
+        # (with name extensions if exists)
+        names = bd.get_bounded()
+        name_parts = []
+        if names is not None:
+            for name in names:
+                declared = self._curr_scope.lookup(name.name)
+                if declared is not None:
+                    name_parts.append(declared.value)
+                    continue
 
-class Parser:
-    """build AST from tokens"""
+                raise TranslatorRuntimeError(f"symbol '{name.name}' not resolved")
 
-    def __init__(self, tokenizer: Tokenizer, reader: CodeReader) -> None:
-        self._tokenizer = tokenizer
-        self._reader = reader
-        self._tokenizer.set_reader(self._reader)
-        self._token: Optional[Token] = None
-        try:
-            self._tokens = self._tokenizer.get_next_token()
-            self._curr_token: Token = next(self._tokens)
-        except StopIteration:
-            msg = f"unexpected EOF.\ntrace:\n{self._tokenizer.get_trace()}"
-            self.error(msg=msg)
+        full_name = f"{bd.get_base_name()}{''.join([f'{n}' for n in name_parts])}"
+        bounded_obj: ConnectionTable = self._curr_scope.lookup(full_name)
+        if bounded_obj is None:
+            raise TranslatorRuntimeError(
+                f"object by full name {full_name} not resolved. DynamicNameError"
+            )
 
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}(tkn={self._tokenizer}, token={self._curr_token})"
+        if self._curr_scope.scope_type == TranslatorToken.SIGNAL:
+            self._curr_scope.bind_to(bounded_obj)
 
-    def eat(self, token: TranslatorToken) -> None:
-        """switch to next token (check token sequence validity)"""
-        if self._curr_token.token_type == token:
-            self._curr_token = next(self._tokens)
+    def put_directive(self, pd: PutDirective) -> None:
+        """directive-unpacker"""
+        # check that symbol declared in scope
+        data_src = pd.source()
+        dest_ctx = pd.dest()
+        value = self._curr_scope.lookup(data_src.name)
+        if value is None:
+            raise TranslatorDirectiveError(f"symbol '{data_src.name}' not resolved")
+
+        ctx = self._curr_scope.lookup_context(dest_ctx.name)
+        if ctx is None:
+            raise TranslatorDirectiveError(f"context '{dest_ctx.name}' not resolved")
+
+        # ==========
+        # add context symbol into usage graph
+        root_sym_ptr = self._macro_sym_table.get(data_src.name)
+        if root_sym_ptr is not None:
+            root_sym = root_sym_ptr()
+
+            if root_sym is None:
+                raise TranslatorRuntimeError("broken symbols graph")
+
+            sym = root_sym.add(ctx.name, "-")
+            self._curr_scope.set_symbol(ctx.name, sym)
+            self._macro_sym_table[ctx.name] = sym
+        # ==========
+
+        ctx_keys = ctx.get_symbol_keys()
+        resolver = ContextResolver(ctx, ctx_keys, value)
+        self._ctx_resolvers[ctx.name] = resolver
+
+    def put_rule(self, pr: PutRule) -> None:
+        pass
+
+    def use_directive(self, ud: UseDirective) -> None:
+        # subscribe current scope on ctx
+        dest = ud.dest()
+        listeners = self._ctx_listeners.get(dest.name)
+
+        if listeners is None:
+            self._ctx_listeners[dest.name] = []
+        self._ctx_listeners[dest.name].append(self._curr_scope)
+
+        ctx = self._curr_scope.lookup_context(dest.name)
+        if ctx is None:
+            return None
+
+        if isinstance(self._curr_scope, TemplateScope):
+            self._curr_scope.set_context(ctx.name, ctx)
             return
 
-        msg = f"Syntax error.\ntrace:\n{self._tokenizer.get_trace()}"
-        self.error(msg=msg)
-
-    def translate(self) -> AstNode:
-        module: Module = Module(f"Module {self._reader.name}")
-        while self._curr_token.token_type != TranslatorToken.EOF:
-            if self._curr_token.token_type == TranslatorToken.OBJ_CLASS:
-                node = self.object()
-                module.add_block(node)
-
-            elif self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-                node = self.var_decl()
-                module.add_variable(node)
-
-            elif self._curr_token.token_type == TranslatorToken.TEMPL_KW:
-                node = self.template()
-                module.add_block(node)
-
-            elif self._curr_token.token_type == TranslatorToken.CONN_KW:
-                node = self.connection()
-                module.add_block(node)
-
-            elif self._curr_token.token_type == TranslatorToken.SIGN_KW:
-                node = self.signal()
-                module.add_block(node)
-
-        return module
-
-    def object(self) -> AstNode:
-        """return block"""
-        self.eat(TranslatorToken.OBJ_CLASS)
-        obj_type = ObjectType(self._curr_token.value, self._curr_token)
-        self.eat(TranslatorToken.OBJ_TYPE)
-        base_name, obj_name = self.name()
-        scope = self.obj_scope()
-        self.eat(TranslatorToken.SEMICOLON)
-        obj = Object(base_name, obj_type, name_ext=obj_name)
-        for node in scope:
-            if node.node_type == TranslatorToken.DIRECTIVE:
-                obj.add_directive(node)
-
-            elif node.node_type == TranslatorToken.VARIABLE:
-                obj.add_variable(node)
-
-            elif node.node_type == TranslatorToken.PARAM_ASSIGN:
-                obj.add_parameter(node)
-
-            elif node.node_type == TranslatorToken.CONNECTION:
-                obj.add_connection(node)
-
-            else:
-                obj.add_block(node)
-        return obj
-
-    def name(self) -> tuple[str, list[AstNode]]:
-        _name = []
-        base_name = self._curr_token.value
-        self.eat(TranslatorToken.ID)
-        while self._curr_token.token_type == TranslatorToken.CONCAT:
-            self.eat(TranslatorToken.CONCAT)
-            _name.append(self.var_extract())
-        return base_name, _name
-
-    def var_extract(self) -> AstNode:
-        self.eat(TranslatorToken.VAR_SYMB)
-        var = self._curr_token
-        self.eat(TranslatorToken.ID)
-        return Var(var)
-
-    def obj_scope(self) -> list[AstNode]:
-        """return block"""
-        self.eat(TranslatorToken.FP_OP)
-        nodes: list[AstNode] = []
-        while self._curr_token.token_type != TranslatorToken.FP_CL:
-            if self._curr_token.token_type == TranslatorToken.OBJ_CLASS:
-                node = self.object()
-                nodes.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-                node = self.var_decl()
-                nodes.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.SIGN_KW:
-                node = self.signal()
-                nodes.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.POINT:
-                node = self.directive()
-                nodes.append(node)
-
-            # skip parameter here -> no grammar
-
-            elif self._curr_token.token_type == TranslatorToken.CONN_KW:
-                node = self.connection()
-                nodes.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.ID:
-                # parameter
-                node = self.obj_param()
-                nodes.append(node)
-
-        self.eat(TranslatorToken.FP_CL)
-        # handle parsed nodes
-        return nodes
-
-    def obj_param(self) -> AstNode:
-        parameter = Parameter(self._curr_token)
-        self.eat(TranslatorToken.ID)
-        self.eat(TranslatorToken.COLON)
-        par_type = self.type_spec()
-        assign = self._curr_token
-        self.eat(TranslatorToken.ASSIGN)
-        par_value: Optional[AstNode] = None
-        declaration = ParamDeclaration(parameter, par_type)
-        if self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-            par_value = self.var_extract()
-
-        elif self._curr_token.token_type == TranslatorToken.RANGE_KW:
-            par_value = self.range()
-
-        else:
-            par_value = self.value()  # ID
-
-        options = self.obj_opt()
-        self.eat(TranslatorToken.SEMICOLON)
-        return ParameterAssign(declaration, assign, par_value, options=options)
-
-    def obj_opt(self) -> list[AstNode]:
-        return []
-
-    def var_decl(self) -> AstNode:
-        self.eat(TranslatorToken.VAR_SYMB)
-        names: list[AstNode] = []
-        while self._curr_token.token_type == TranslatorToken.ID:
-            var = Var(self._curr_token)
-            names.append(var)
-            self.eat(TranslatorToken.ID)
-
-            if self._curr_token.token_type != TranslatorToken.COMMA:
-                break
-
-            self.eat(TranslatorToken.COMMA)
-            self.eat(TranslatorToken.VAR_SYMB)
-
-        self.eat(TranslatorToken.COLON)
-        type_spec = self.type_spec()
-
-        declaration = VarDeclaration(names, type_spec)
-
-        if self._curr_token.token_type == TranslatorToken.ASSIGN:
-            assign = self._curr_token
-
-            self.eat(TranslatorToken.ASSIGN)
-            if self._curr_token.token_type == TranslatorToken.RP_OP:
-                # dynamic name
-                val_src = self.dyn_name()
-
-            elif self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-                val_src = self.var_extract()
-
-            else:
-                # value
-                val_src = self.value()
-
-            declaration = VarAssign(declaration, assign, val_src)
-
-        self.eat(TranslatorToken.SEMICOLON)
-        return declaration
-
-    def dyn_name(self) -> AstNode:
-        self.eat(TranslatorToken.RP_OP)
-        base = self._curr_token
-        name_parts: list[AstNode] = []
-        self.eat(TranslatorToken.ID)
-        while self._curr_token.token_type == TranslatorToken.CONCAT:
-            name = self.var_extract()
-            name_parts.append(name)
-        self.eat(TranslatorToken.RP_CL)
-        dyn_name = DynamicVarName(base, name_parts)
-        return dyn_name
-
-    def template(self) -> AstNode:
-        self.eat(TranslatorToken.TEMPL_KW)
-        templ_name = self._curr_token
-        self.eat(TranslatorToken.ID)
-        scope = self.templ_scope()
-        self.eat(TranslatorToken.SEMICOLON)
-        template = Template(templ_name.value)
-        for node in scope:
-            if node.node_type == TranslatorToken.CONTEXT:
-                template.add_context(node)
-
-            elif node.node_type == TranslatorToken.DIRECTIVE:
-                template.add_directive(node)
-
-            elif node.node_type == TranslatorToken.VARIABLE:
-                template.add_variable(node)
-
-            elif node.node_type == TranslatorToken.PARAMETER:
-                template.add_parameter(node)
-
-            elif node.node_type == TranslatorToken.CONNECTION:
-                template.add_connection(node)
-
-            else:
-                template.add_block(node)
-
-        return template
-
-    def templ_scope(self) -> list[AstNode]:
-        self.eat(TranslatorToken.FP_OP)
-        nodes: list[AstNode] = []
-        while self._curr_token.token_type != TranslatorToken.FP_CL:
-            if self._curr_token.token_type == TranslatorToken.OBJ_CLASS:
-                node = self.object()
-                nodes.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-                node = self.var_decl()
-                nodes.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.SIGN_KW:
-                node = self.signal()
-                nodes.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.POINT:
-                node = self.directive()
-                nodes.append(node)
-
-            # skip parameter here -> no grammar
-
-            elif self._curr_token.token_type == TranslatorToken.CONN_KW:
-                node = self.connection()
-                nodes.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.POINT:
-                node = self.directive()
-                nodes.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.CTX_KW:
-                node = self.context()
-                nodes.append(node)
-
-        self.eat(TranslatorToken.FP_CL)
-        return nodes
-
-    def context(self) -> AstNode:
-        self.eat(TranslatorToken.CTX_KW)
-        ctx_name = self._curr_token  # ID
-        self.eat(TranslatorToken.ID)
-        scope = self.ctx_scope()
-        self.eat(TranslatorToken.SEMICOLON)
-        context = Context(ctx_name.value)
-        for var in scope:
-            context.add_variable(var)
-        return context
-
-    def ctx_scope(self) -> list[AstNode]:
-        self.eat(TranslatorToken.FP_OP)
-        _vars: list[AstNode] = []
-        while self._curr_token.token_type != TranslatorToken.FP_CL:
-            _vars.append(self.var_decl())
-
-        self.eat(TranslatorToken.FP_CL)
-        return _vars
-
-    def signal(self) -> AstNode:
-        self.eat(TranslatorToken.SIGN_KW)
-        direction = self.s_direct()
-        sig_type = self.sign_type()
-        base_name, sig_name = self.name()
-        scope = self.sign_scope()
-        self.eat(TranslatorToken.SEMICOLON)
-        signal = Signal(base_name, direction, sig_type, name_ext=sig_name)
-        for node in scope:
-            if node.node_type == TranslatorToken.DIRECTIVE:
-                signal.add_directive(node)
-
-            elif node.node_type == TranslatorToken.VARIABLE:
-                signal.add_variable(node)
-
-            elif node.node_type == TranslatorToken.PARAM_ASSIGN:
-                signal.add_parameter(node)
-
-            elif node.node_type == TranslatorToken.CONNECTION:
-                signal.set_connection(node)
-
-        return signal
-
-    def s_direct(self) -> AstNode:
-        d = self._curr_token
-        self.eat(TranslatorToken.SIGN_DIRECT)
-        return SignalDirection(d.value, d)
-
-    def sign_type(self) -> AstNode:
-        t = self._curr_token
-        self.eat(TranslatorToken.SIGN_TYPE)
-        return SignalType(t.value, t)
-
-    def sign_scope(self) -> list[AstNode]:
-        self.eat(TranslatorToken.FP_OP)
-        blocks: list[AstNode] = []
-        while self._curr_token.token_type != TranslatorToken.FP_CL:
-            if self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-                node = self.var_decl()
-                blocks.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.ID:
-                # sign parameter
-                node = self.sign_par()
-                blocks.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.POINT:
-                node = self.directive()
-                blocks.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.CONN_KW:
-                node = self.connection()
-                blocks.append(node)
-
-        self.eat(TranslatorToken.FP_CL)
-        return blocks
-
-    def sign_par(self) -> AstNode:
-        parameter = Parameter(self._curr_token)
-        self.eat(TranslatorToken.ID)
-        self.eat(TranslatorToken.COLON)
-        par_type = self.type_spec()
-        assign = self._curr_token
-        self.eat(TranslatorToken.ASSIGN)
-        par_value: Optional[AstNode] = None
-        declaration = ParamDeclaration(parameter, par_type)
-        if self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-            par_value = self.var_extract()
-
-        elif self._curr_token.token_type == TranslatorToken.RANGE_KW:
-            par_value = self.range()
-
-        else:
-            par_value = self.value()  # ID
-
-        options = self.s_option()
-        self.eat(TranslatorToken.SEMICOLON)
-        return ParameterAssign(declaration, assign, par_value, options=options)
-
-    def s_option(self) -> list[AstNode]:
-        options: list[AstNode] = []
-        while self._curr_token.token_type == TranslatorToken.SIGN_OPT:
-            opt_token = self._curr_token
-            self.eat(TranslatorToken.SIGN_OPT)
-
-            if self._curr_token.token_type != TranslatorToken.ASSIGN:
-                # opt without value
-                opt = ParameterOption(opt_token)
-                options.append(opt)
-                continue
-
-            self.eat(TranslatorToken.ASSIGN)
-            par_value: AstNode
-
-            if self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-                par_value = self.var_extract()
-
-            elif self._curr_token.token_type == TranslatorToken.S_CONST:
-                par_value = SystemConstValue(self._curr_token)
-                self.eat(TranslatorToken.S_CONST)
-
-            else:
-                par_value = self.value()
-
-            opt = ParameterOption(opt_token, value=par_value)
-            options.append(opt)
-            continue
-
-        return options
-
-    def value(self) -> AstNode:
-        """value        : text_value | numeric | bool_value | array
-        numeric      : MINUS? INT | FLOAT
-        text_value   : STR
-        bool_value   : BOOL
-        MINUS        : "-"
+        self._curr_scope.set_context(ctx)
+
+        # ==========
+        # add context symbol into usage graph
+        # lookup macro depends on ctx name
+        root_sym_ptr = self._macro_sym_table.get(ctx.name)
+        if root_sym_ptr is not None:
+            # we have to register symbol inside local scope
+            self._curr_scope.set_symbol(ctx.name, root_sym_ptr)
+        # ==========
+
+    def range(self, r: Range) -> None:
+
+        if r.max.node_type == TranslatorToken.ID:
+            value = self._curr_scope.lookup(r.max.name)
+            if value is None:
+                raise TranslatorRuntimeError(
+                    f"value '{r.max.name}' in range not resolved"
+                )
+
+            if not isinstance(value.value, Value):
+                raise TranslatorRuntimeError(
+                    f"invalid range value '{value.value}' (vt={value.node_type})"
+                )
+
+            r.max = value.value
+
+        if r.min.node_type == TranslatorToken.ID:
+            value = self._curr_scope.lookup(r.min.name)
+            if value is None:
+                raise TranslatorRuntimeError(
+                    f"value '{r.min.name}' in range not resolved"
+                )
+
+            if not isinstance(value.value, Value):
+                raise TranslatorRuntimeError("invalid value type")
+
+            r.min = value.value
+
+
+class TypeMatcher:
+    """responsibility for type resolving"""
+
+    def type_match(self, symb: Symbol, value: AstNode) -> bool:
+        """match declared type with current.
+        value should be an interface
         """
-
-        token = self._curr_token
-        if self._curr_token.token_type in (
-            TranslatorToken.MINUS,
-            TranslatorToken.INT,
-            TranslatorToken.FLOAT,
-        ):
-            return self.numeric()
-
-        elif self._curr_token.token_type == TranslatorToken.STR:
-            self.eat(TranslatorToken.STR)
-
-        elif self._curr_token.token_type == TranslatorToken.BOOL:
-            self.eat(TranslatorToken.BOOL)
-
-        elif self._curr_token.token_type == TranslatorToken.SP_OP:
-            return self.array()
-
-        return Value(token)
-
-    def numeric(self) -> AstNode:
-        token = self._curr_token
-        minus: Optional[Token] = None
-        if self._curr_token.token_type == TranslatorToken.MINUS:
-            minus = token
-            self.eat(TranslatorToken.MINUS)
-            token = self._curr_token
-
-        if self._curr_token.token_type == TranslatorToken.INT:
-            self.eat(TranslatorToken.INT)
-
-        elif self._curr_token.token_type == TranslatorToken.FLOAT:
-            self.eat(TranslatorToken.FLOAT)
-
-        return Value(token, unary_token=minus)
-
-    def array(self) -> AstNode:
-        self.eat(TranslatorToken.SP_OP)
-        arr_items: list[AstNode] = []
-        while self._curr_token.token_type != TranslatorToken.SP_CL:
-            arr_items.extend(self.arr_items())
-
-        self.eat(TranslatorToken.SP_CL)
-        return ArrayValue(arr_items)
-
-    def arr_items(self) -> list[AstNode]:
-        items: list[AstNode] = []
-        if self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-            items.append(Var(self._curr_token))
-
-        else:
-            items.append(self.value())
-
-        while self._curr_token.token_type == TranslatorToken.COMMA:
-            self.eat(TranslatorToken.COMMA)
-
-            if self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-                items.append(Var(self._curr_token))
-
-            else:
-                items.append(self.value())
-
-        return items
-
-    def directive(self) -> AstNode:
-        self.eat(TranslatorToken.POINT)
-        _direct = self.dir_kind()
-        self.eat(TranslatorToken.SEMICOLON)
-        return _direct
-
-    def dir_kind(self) -> AstNode:
-        if self._curr_token.token_type == TranslatorToken.USE_KW:
-            return self.use()
-
-        elif self._curr_token.token_type == TranslatorToken.PUT_KW:
-            return self.put()
-
-        elif self._curr_token.token_type == TranslatorToken.BIND_KW:
-            return self.bind()
-
-    def bind(self) -> AstNode:
-        bind_type = self._curr_token
-        self.eat(TranslatorToken.BIND_KW)
-        ext: Optional[list[AstNode]] = None
-        if self._curr_token.token_type == TranslatorToken.RP_OP:
-            obj_name, ext = self.comp_name()
-        else:
-            obj_name = self._curr_token.value
-            self.eat(TranslatorToken.ID)
-        return BindDirective(bind_type.value, bind_type, obj_name, name_ext=ext)
-
-    def comp_name(self) -> AstNode:
-        self.eat(TranslatorToken.RP_OP)
-        name = self.name()
-        self.eat(TranslatorToken.RP_CL)
-        return name
-
-    def put(self) -> AstNode:
-        """put          : put_kw in ID from var_extract rule?
-           put_kw       : подстановка
-           in           : в
-           from         : из
-
-        EBNF rule grammar
-        """
-        put_type = self._curr_token
-        self.eat(TranslatorToken.PUT_KW)
-        self.eat(TranslatorToken.IN)
-        dest = PutIn(self._curr_token)
-        self.eat(TranslatorToken.ID)
-        self.eat(TranslatorToken.FROM)
-        src = PutFrom(self.var_extract())
-        rule = None
-        if self._curr_token.token_type == TranslatorToken.RULE_KW:
-            rule = self.rule()
-        return PutDirective(put_type.value, put_type, dest, src, rule=rule)
-
-    def use(self) -> AstNode:
-        name = self._curr_token
-        self.eat(TranslatorToken.USE_KW)
-        dest = UseDest(self._curr_token)
-        self.eat(TranslatorToken.ID)
-        meth = self.use_method()
-        vals_kw = self.vals_kw()
-        filter = self.filter()
-        use_directive = UseDirective(
-            name.value,
-            name,
-            dest,
-            meth,
-            vals_kw,
-            filter,
-        )
-        return use_directive
-
-    def rule(self) -> AstNode | None:
-        """rule         : rule_kw (rule_expr | var_extract)
-        rule_expr    : SP_OP idx HYPHEN idx SP_CL junc SP_OP IT SP_CL
-        rule_kw      : правило
-        """
-        self.eat(TranslatorToken.RULE_KW)
-        if self._curr_token.token_type == TranslatorToken.SP_OP:
-            return self.rule_expr()
-
-        return self.var_extract()
-
-    def rule_expr(self) -> AstNode:
-        self.eat(TranslatorToken.SP_OP)
-        _fr = self._curr_token
-        self.eat(TranslatorToken.INT)
-        self.eat(TranslatorToken.COLON)
-        _to = self._curr_token
-        self.eat(TranslatorToken.INT)
-        self.eat(TranslatorToken.SP_CL)
-        self.eat(TranslatorToken.JUNC)
-        self.eat(TranslatorToken.SP_OP)
-        i_par = self._curr_token
-        self.eat(TranslatorToken.IT)
-        self.eat(TranslatorToken.SP_CL)
-        return PutRule(_fr, _to, i_par)
-
-    def use_method(self) -> AstNode:
-        m = self._curr_token
-        self.eat(TranslatorToken.USE_METHOD)
-        return UseMethod(m)
-
-    def vals_kw(self) -> AstNode:
-        v_kw = self._curr_token
-        self.eat(TranslatorToken.VALS_KW)
-        return UseVals(v_kw)
-
-    def filter(self) -> AstNode:
-        kind = self._curr_token
-        if self._curr_token.token_type == TranslatorToken.EXCL_KV:
-            f_val = self.exclude()
-            return UseDirectiveFilter(kind, value=f_val)
-
-        self.eat(TranslatorToken.ALL)
-        return UseDirectiveFilter(kind)
-
-    def exclude(self) -> AstNode:
-        self.eat(TranslatorToken.EXCL_KV)
-        if self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-            return self.var_extract()
-
-        return self.value()
-
-    def connection(self) -> AstNode:
-        self.eat(TranslatorToken.CONN_KW)
-        base_name, conn_name = self.name()
-        scope = self.conn_scope()
-        self.eat(TranslatorToken.SEMICOLON)
-        connection = Connection(base_name, name_ext=conn_name)
-        for node in scope:
-            if node.node_type == TranslatorToken.DIRECTIVE:
-                connection.add_directive(node)
-
-            elif node.node_type == TranslatorToken.VARIABLE:
-                connection.add_variable(node)
-
-            else:
-                connection.add_parameter(node)
-
-        return connection
-
-    def conn_scope(self) -> list[AstNode]:
-        self.eat(TranslatorToken.FP_OP)
-        nodes: list[AstNode] = []
-        while self._curr_token.token_type != TranslatorToken.FP_CL:
-            if self._curr_token.token_type == TranslatorToken.ID:
-                node = self.conn_par()
-                nodes.append(node)
-
-            elif self._curr_token.token_type == TranslatorToken.POINT:
-                node = self.directive()
-                nodes.append(node)
-
-        self.eat(TranslatorToken.FP_CL)
-        return nodes
-
-    def conn_par(self) -> AstNode:
-        param = Parameter(self._curr_token)
-        self.eat(TranslatorToken.ID)
-        self.eat(TranslatorToken.COLON)
-        _par_type = self.type_spec()
-        _par_value: Optional[AstNode] = None
-        declaration = ParamDeclaration(param, _par_type)
-        assign = self._curr_token
-        self.eat(TranslatorToken.ASSIGN)
-
-        if self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-            _par_value = self.var_extract()
-
-        elif self._curr_token.token_type == TranslatorToken.RANGE_KW:
-            _par_value = self.range()
-
-        else:
-            _par_value = self.value()
-
-        options = self.conn_opt()
-        self.eat(TranslatorToken.SEMICOLON)
-        return ParameterAssign(declaration, assign, _par_value, options=options)
-
-    def conn_opt(self) -> list[AstNode]:
-        options: list[AstNode] = []
-        while self._curr_token.token_type in (TranslatorToken.CONN_OPT,):
-            opt_type = self._curr_token
-            self.eat(TranslatorToken.CONN_OPT)
-
-            if self._curr_token.token_type != TranslatorToken.ASSIGN:
-                # option without parameter
-                # create and add option
-                option = ParameterOption(opt_type)
-                options.append(option)
-                continue
-
-            self.eat(TranslatorToken.ASSIGN)
-            if self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-                opt_value = self.var_extract()
-
-            else:
-                opt_value = self.value()
-
-            option = ParameterOption(opt_type, value=opt_value)
-            options.append(option)
-
-        return options
-
-    def range(self) -> AstNode:
-        is_float = False
-        self.eat(TranslatorToken.RANGE_KW)
-        self.eat(TranslatorToken.SP_OP)
-        token = self._curr_token
-        _range: list[AstNode] = [None, None]
-        if self._curr_token.token_type == TranslatorToken.TILDA:
-            self.eat(TranslatorToken.TILDA)
-            _min = TildaValue(token, float("-inf"))
-            _range[0] = _min
-
-        elif self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-            val = self.var_extract()
-            _range[0] = val
-
-        else:
-            _range[0] = Value(token)
-            self.eat(TranslatorToken.INT)
-
-        self.eat(TranslatorToken.COMMA)
-        token = self._curr_token
-
-        if self._curr_token.token_type == TranslatorToken.TILDA:
-            self.eat(TranslatorToken.TILDA)
-            _max = TildaValue(token, float("+inf"))
-            _range[1] = _max
-
-        elif self._curr_token.token_type == TranslatorToken.VAR_SYMB:
-            val = self.var_extract()
-            _range[1] = val
-
-        else:
-            _range[1] = Value(token)
-            self.eat(TranslatorToken.INT)
-
-        self.eat(TranslatorToken.SP_CL)
-        return Range(_range[0], _range[1])
-
-    def type_spec(self) -> AstNode:
-        token = self._curr_token
-        if self._curr_token.token_type == TranslatorToken.INT_CONST:
-            self.eat(TranslatorToken.INT_CONST)
-
-        elif self._curr_token.token_type == TranslatorToken.FLOAT_CONST:
-            self.eat(TranslatorToken.FLOAT_CONST)
-
-        elif self._curr_token.token_type == TranslatorToken.STR_CONST:
-            self.eat(TranslatorToken.STR_CONST)
-
-        elif self._curr_token.token_type == TranslatorToken.BOOL_CONST:
-            self.eat(TranslatorToken.BOOL_CONST)
-
-        elif self._curr_token.token_type == TranslatorToken.ARRAY_CONST:
-            is_arr, spec = self.array_spec()
-            if not is_arr:
-                self.error(msg=f"Syntax error/\ntrace:\n{self._tokenizer.get_trace()}")
-            return spec
-        return _T(token)
-
-    def array_spec(self) -> tuple[bool, AstNode]:
-        arr_t = _ArrT()
-        arr_t.add_definition(_T(self._curr_token))
-        self.eat(TranslatorToken.ARRAY_CONST)
-        arr_t.add_definition(_T(self._curr_token))
-        self.eat(TranslatorToken.SP_OP)
-        while self._curr_token.token_type != TranslatorToken.SP_CL:
-            _type = self.type_spec()
-            arr_t.add_definition(_type)
-
-            if self._curr_token.token_type == TranslatorToken.COLON:
-                arr_t.add_definition(_T(self._curr_token))
-                _types_cnt = self.arr_size()
-                arr_t.add_definition(_types_cnt)
-
-            elif self._curr_token.token_type == TranslatorToken.ELLIPSIS:
-                # we will break, next symbol should be ']'
-                arr_t.add_definition(_T(self._curr_token))
-                self.eat(TranslatorToken.ELLIPSIS)
-                continue
-
-            if self._curr_token.token_type == TranslatorToken.COMMA:
-                arr_t.add_definition(_T(self._curr_token))
-                self.eat(TranslatorToken.COMMA)
-
-        arr_t.add_definition(_T(self._curr_token))
-        self.eat(TranslatorToken.SP_CL)
-        return True, arr_t
-
-    def arr_size(self) -> AstNode:
-        self.eat(TranslatorToken.COLON)
-        sz = Value(self._curr_token)
-        self.eat(TranslatorToken.INT)
-        return sz
-
-    def error(self, *, msg: str = "") -> NoReturn:
-        raise TranslatorError(msg)
+        FLOAT = (TranslatorToken.FLOAT_CONST, TranslatorToken.FLOAT)
+        INT = (TranslatorToken.INT_CONST, TranslatorToken.INT)
+        STR = (TranslatorToken.STR_CONST, TranslatorToken.STR)
+        BOOL = (TranslatorToken.BOOL_CONST, TranslatorToken.BOOL)
+
+        if symb.node_type == TranslatorToken.FLOAT_CONST:
+            if value.node_type == TranslatorToken.RANGE:
+                value: Range
+                return (
+                    value.min.node_type == TranslatorToken.FLOAT
+                    or isinstance(value.min, TildaValue)
+                ) and (
+                    value.max.node_type == TranslatorToken.FLOAT
+                    or isinstance(value.max, TildaValue)
+                )
+
+            return value.node_type in FLOAT
+
+        elif symb.node_type == TranslatorToken.INT_CONST:
+            if value.node_type == TranslatorToken.RANGE:
+                value: Range
+                return (
+                    value.min.node_type == TranslatorToken.INT
+                    and value.max.node_type == TranslatorToken.INT
+                )
+
+            return value.node_type in INT
+
+        elif symb.node_type == TranslatorToken.BOOL_CONST:
+            return value.node_type in BOOL
+
+        elif symb.node_type == TranslatorToken.STR_CONST:
+            return value.node_type in STR
+
+        elif symb.node_type == TranslatorToken.ARRAY_CONST:
+            return self.match_array(symb, value)
+
+    def match_array(self, symb: Symbol, value: AstNode) -> bool:
+        """fake implementation"""
+        # print("match_array", symb, value)
+        # match symb (array_const) on value (array_value)
+        return True
+
+
+class ContextResolver:
+    """generator, that will update ctx with new values"""
+
+    def __init__(self, ctx: ContextScope, ctx_keys: list[str], value_src: Any) -> None:
+        self._ctx = ctx
+        self._keys = ctx_keys
+        self._value_src = value_src
+        self._matcher = TypeMatcher()
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(ctx={self._ctx}, keys={self._keys})"
+
+    def get_ctx_name(self) -> str:
+        return self._ctx.name
+
+    def get_resolver(self) -> Generator[None, None, None]:
+        """generator, that doesn`t return anything, only set ctx"""
+
+        # now waiting [[str:6, int:2]..]
+        values = (v.value for v in self._value_src.value.value)
+        for value in values:
+            if len(value) != len(self._keys):
+                raise TranslatorDirectiveError(
+                    f"array symbols count not match to context {self._ctx.name}"
+                )
+
+            for idx, val in enumerate(value):
+                declared = self._ctx.lookup(self._keys[idx])
+                if declared is None:
+                    raise TranslatorRuntimeError(
+                        f"context symbol '{self._keys[idx]}' not resolved"
+                    )
+
+                if not self._matcher.type_match(declared, val):
+                    raise TranslatorTypeError(
+                        f"context '{self._ctx.name}' type mismatch:\n"
+                        f"\tdeclared var '{declared.name}' of type <{declared.node_type.value}>, got type <{val.node_type.value}> (value={val.value!r})\n"
+                        f"\tcheck source file: ..."
+                    )
+
+                self._ctx.set_value(declared.name, val.value)
+
+            yield

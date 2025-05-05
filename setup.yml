@@ -1,0 +1,8 @@
+dialects:
+  - yaml:
+      # represent source edl format as yaml format
+      # to use yaml text as source-code for config generation
+      translator_obj_path: "translators.yaml_finalizer.YamlFinalizer"
+
+      # is not allowed for yaml representation
+      allow_context: false

@@ -32,3 +32,9 @@ class TranslatorDirectiveError(TranslatorError):
     """raises when directive failed"""
 
     pass
+
+
+class SetupError(TranslatorError):
+    """no setup or invalid setup file"""
+
+    pass

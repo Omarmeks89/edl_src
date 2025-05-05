@@ -1,12 +1,14 @@
+import weakref
 from abc import abstractmethod
-from typing import Optional, Any, Mapping
+from typing import Any, Mapping, Optional
 
-from src.ast import AstNode, Value, _T, Var, SystemConstValue, Range
+from src._ast import _T, AstNode, Range, SystemConstValue, Value, Var
 from src.exceptions import (
-    TranslatorRuntimeError,
     TranslatorParameterError,
+    TranslatorRuntimeError,
     TranslatorTypeError,
 )
+from src.symbols_graph import orgnode
 from src.tokens import TranslatorToken
 
 
@@ -52,23 +54,17 @@ class VarSymbol(Symbol):
     """used for variables"""
 
     def __init__(
-        self, name: str, *, _type: Optional[Any] = None, value: Optional[Value] = None
+        self,
+        name: str,
+        *,
+        _type: Optional[Any] = None,
+        value: Optional[Value] = None,
     ) -> None:
         super().__init__(name, _type=_type)
         self._value: Optional[Value] = value
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(name={self._name}, type={self._type}, val={self._value})"
-
-    @property
-    def value(self) -> Any | None:
-        if self._value is None:
-            return self._value
-
-        value = self._value.value
-        if self._value.negative:
-            value = -value
-        return value
 
     def set_value(self, value: Value) -> None:
         self._value = value
@@ -612,12 +608,18 @@ class AbstractDataTable:
         self._binded: Optional[AbstractDataTable] = None
         self._ctx: Optional["ContextScope"] = None
 
+        # add macro symbols table (usage graph)
+        self._macro_symbols: dict[str, weakref.ref[orgnode]] = {}
+
     def __repr__(self) -> str:
+        ctx_name = "-"
+        if self._ctx is not None:
+            ctx_name = self._ctx.name
         return (
             f"{type(self).__name__}({self._name}, "
             f"{self._scope_type}, {type(self._enclosed_scope)}, "
             f"symbs={self._symbols}, params={self._params}, "
-            f"ctx={self._ctx})"
+            f"ctx={ctx_name}, macro={self._macro_symbols.keys()})"
         )
 
     @property
@@ -646,6 +648,36 @@ class AbstractDataTable:
             self._ctx = ctx
             return
         raise TranslatorRuntimeError(f"attempt to redefine context: {ctx.name}")
+
+    def set_symbol(self, s_name: str, node: weakref.ref[orgnode]) -> None:
+        """Add symbol into the table. Is useful for inspect symbols usage graph
+
+        Args:
+            s_name(str): symbol name
+            node(weakref.ref[orgnode]): pointer on current graph node
+
+        Raises:
+            TranslatorRuntimeError: if symbol exists
+        """
+        # if s_name in self._macro_symbols:
+        #     raise TranslatorRuntimeError(f"macro symbol '{s_name}' exists")
+        self._macro_symbols[s_name] = node
+
+    def get_symbol_root_value(self, s_name: str) -> Any | None:
+        """Get value stored in root graph symbol
+
+        Args:
+            s_name(str): symbol name for lookup
+        """
+        symbol_ptr = self._macro_symbols.get(s_name)
+        if symbol_ptr is None:
+            return symbol_ptr
+
+        symbol = symbol_ptr()
+        if symbol is None:
+            return symbol
+
+        return symbol.get_root_value()
 
     def init_builtins(self) -> None:
         """init types: INT, STR, FLOAT, BOOL, ARRAY"""
@@ -683,7 +715,13 @@ class AbstractDataTable:
         """declare parameter and check that param is allowed for scope"""
         pass
 
-    def lookup(self, sym_name: str, *, only_curr: bool = False) -> Symbol | None:
+    def lookup(
+        self,
+        sym_name: str,
+        *,
+        only_curr: bool = False,
+        include_context: bool = True,
+    ) -> Symbol | None:
         """lookup for VARIABLE
         If value is returned, symbol is declared
         only_curr - lookup only in current scope.
@@ -692,7 +730,7 @@ class AbstractDataTable:
         if symbol is None:
             # if nothing in symbols let`s try to find in
             # context and resolve name
-            if self._ctx is not None:
+            if self._ctx is not None and include_context:
                 symbol = self._ctx.lookup(sym_name)
 
         if only_curr:
@@ -874,6 +912,7 @@ class SignalTable(AbstractDataTable):
         self._params[param_name].append(param)
 
     def bind_to(self, b: "AbstractDataTable") -> None:
+        """bind to signal source"""
         if self._binded is None and id(self) != id(b):
             self._binded = ConnectionLink(b.name, b)
 
@@ -901,6 +940,9 @@ class ConnectionTable(AbstractDataTable):
 
     def set_name_extensions(self, ext: list[VarSymbol]) -> None:
         self._name_ext = ext
+
+    def set_name(self, new_name: str) -> None:
+        self._name = new_name
 
     def get_name_extensions(self) -> list[VarSymbol]:
         return self._name_ext

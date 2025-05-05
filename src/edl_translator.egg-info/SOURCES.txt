@@ -1,7 +1,0 @@
-LICENSE
-README.md
-setup.py
-src/edl_translator.egg-info/PKG-INFO
-src/edl_translator.egg-info/SOURCES.txt
-src/edl_translator.egg-info/dependency_links.txt
-src/edl_translator.egg-info/top_level.txt

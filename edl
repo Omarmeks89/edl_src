@@ -1,16 +1,73 @@
 #!/usr/bin/env python3.11
 
+"""Macro artifacts resolving:
+----- preprocessing stage
+1. macro_param -> macro_symb;
+2. macro_symb -> var;
+----- ADT resolving stage (AdtBuilder)
+3. var -> context
+4. ctx -> obj
+(fetch artifact name from ctx field)
+"""
+
+import importlib
 import os
-from typing import Optional
+import pathlib
+import time
+from dataclasses import dataclass
+from types import ModuleType
+from typing import Any, Optional
 
 import click
 
 from src.code_reader import CodeReader
-from src.compilers import AdtBuilder
 from src.exceptions import TranslatorError
-from src.preprocessor import make_processor, TextProcessor
-from src.translator import Tokenizer, Parser
-from translators.finalizer import TranslationFinalizer
+from src.finalizer import BaseFinalizer
+from src.parser import Tokenizer, Parser
+from src.preprocessor import make_preprocessor, Preprocessor
+from src.tools import load_setup_data
+from src.translator import AdtBuilder
+
+
+@dataclass
+class TranslationDialect:
+    translator_obj_path: str
+    allow_context: bool = False
+
+
+def import_finalizer(path: str | pathlib.Path) -> BaseFinalizer | None:
+    """Import specific translator from field 'translator_obj_path'
+
+    Args:
+        path (str | pathlib.Path): translator object path from 'setup.yml'
+
+    Returns:
+        BaseFinalizer:
+    """
+    package, _, _class = path.rpartition(".")
+    try:
+        module: ModuleType = importlib.import_module(package)
+        return getattr(module, _class)
+    except (ModuleNotFoundError, OSError, AttributeError) as err:
+        os.write(2, f"{err}\n".encode("utf-8"))
+        return None
+
+
+def init_dialect(dialect: str, setup: dict[str, Any]) -> TranslationDialect | None:
+    dialects = setup.get("dialects")
+    if dialects is None:
+        os.write(2, "dialects field not specified. check 'setup.yml'\n".encode("utf-8"))
+        return None
+
+    curr_dialect: TranslationDialect | None = None
+    for d in dialects:
+        cd = d.get(dialect)
+        if cd is None:
+            continue
+
+        curr_dialect = TranslationDialect(**cd)
+
+    return curr_dialect
 
 
 @click.command()
@@ -18,30 +75,61 @@ from translators.finalizer import TranslationFinalizer
     "-f",
     "--file",
     required=True,
-    help="choose code-source file",
+    help="choose source code file",
     type=str,
 )
 @click.option(
     "-e",
     is_flag=True,
     default=False,
-    help="will dump preprocessing result and stop compilation",
+    help="will dump preprocessing result and stop translation",
+)
+@click.option(
+    "-i",
+    is_flag=True,
+    default=False,
+    help="return translation process info (details)",
 )
 @click.option(
     "--output-path",
     default=".",
-    help="write compilation result by path",
+    help="write translation result by path",
     type=str,
 )
-def edl(file: str, e: bool, output_path: str) -> None:
+@click.option(
+    "--dialect",
+    default="yaml",
+    help="choose dialect (from supported) to translate. Yaml is default dialect",
+    type=str,
+)
+def edl(
+    file: str,
+    e: bool,
+    i: bool,
+    output_path: str,
+    dialect: str,
+) -> None:
     """run edl translator"""
-    if file is None:
-        raise TranslatorError("source file not choosed")
 
-    proc: Optional[TextProcessor] = None
+    comp_start = time.perf_counter()
+    if file is None:
+        raise TranslatorError("no source file")
+
+    dups = 0
+    data = load_setup_data()
+    curr_dialect = init_dialect(dialect, data)
+    if curr_dialect is None:
+        os.write(2, f"unexpected dialect '{dialect}'\n".encode("utf-8"))
+        exit(1)
+
+    finalizer_cls = import_finalizer(curr_dialect.translator_obj_path)
+    if finalizer_cls is None:
+        exit(1)
+
+    proc: Optional[Preprocessor] = None
     try:
         reader = CodeReader(file)
-        proc = make_processor(reader)
+        proc = make_preprocessor(reader)
         proc.process()
     except (TranslatorError, OSError) as err:
         os.write(2, f"preprocessing error:\n{err}".encode("utf-8"))
@@ -50,28 +138,31 @@ def edl(file: str, e: bool, output_path: str) -> None:
     if e:
         try:
             proc.dump(f"{output_path}/out.txt")
-            # break compilation
+            # break translation
             exit(0)
         except (TranslatorError, OSError) as err:
             os.write(2, f"preprocessing result dump error:\n{err}".encode("utf-8"))
             exit(1)
 
+    macro_syms_table = proc.get_macro_symbols_pointers()
+
     lexer = Tokenizer()
     parser = Parser(lexer, reader)
-    compiler = AdtBuilder(parser)
+    adt_builder = AdtBuilder(parser, macro_syms_table)
 
-    # choose translator
-    finalizer = TranslationFinalizer()
+    finalizer: BaseFinalizer = finalizer_cls()
     try:
-        compiler.run(finalizer)
+        adt_builder.run(finalizer, resolve_context=curr_dialect.allow_context)
     except (TranslatorError, OSError) as err:
-        os.write(2, f"compilation error:\n{err}\n".encode("utf-8"))
+        os.write(2, f"translation error:\n{err}\n".encode("utf-8"))
         exit(1)
 
-    finalizer.write_signals(path=output_path)
-    finalizer.write_conn_src(path=output_path)
-    finalizer.write_signals_format(path=output_path)
-    finalizer.write_aliases(path=output_path)
+    finalizer.write(output_path=output_path)
+
+    # inspect result on duplicates (load comparator from 'setup.yml')
+    if i:
+        comp_info = f"translation time: {time.perf_counter() - comp_start:.2f} sec.\n"
+        os.write(1, comp_info.encode("utf-8"))
 
 
 if __name__ == "__main__":

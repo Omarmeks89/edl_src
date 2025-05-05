@@ -3,23 +3,26 @@ additionally format symbols or represent any
 expression as a single symbol"""
 
 import pathlib
+import weakref
+from collections import deque
 from enum import StrEnum
 from typing import Mapping, NoReturn, Any, Generator, Optional
 
+from .symbols_graph import orgnode
 from .code_reader import CodeReader
-from .exceptions import PreprocessorError
+from .exceptions import PreprocessorError, TranslatorError
 from .stree import stree, ndef
 
 
 class TokenType(StrEnum):
-    START_MACRO: str = "START_MACRO"
-    UPLOAD: str = "UPLOAD"
-    DEFINE: str = "DEFINE"
-    SYMBOL: str = "SYMBOL"
-    LITERAL: str = "LITERAL"
-    NUMERIC: str = "NUMERIC"
-    EOL: str = "EOL"
-    EOF: str = "EOF"
+    START_MACRO = "START_MACRO"
+    UPLOAD = "UPLOAD"
+    DEFINE = "DEFINE"
+    SYMBOL = "SYMBOL"
+    LITERAL = "LITERAL"
+    NUMERIC = "NUMERIC"
+    EOL = "EOL"
+    EOF = "EOF"
 
 
 class PreprocessorToken:
@@ -49,7 +52,7 @@ class Lexer:
     """Lexer for preprocessor"""
 
     _reserved_keywords: Mapping[str, PreprocessorToken] = {
-            "upload": PreprocessorToken("upload", TokenType.UPLOAD, 6),
+        "upload": PreprocessorToken("upload", TokenType.UPLOAD, 6),
         "define": PreprocessorToken("define", TokenType.DEFINE, 6),
     }
 
@@ -75,6 +78,9 @@ class Lexer:
 
         test.edl:10
         """
+        if self._reader_obj is None:
+            self.error(msg="reader not exists")
+
         # if line ended with EOL and symbol pointer on last position
         # we have to shift pointer left on 1 position
         if self._code[-1] == "\n" and self._pos == len(self._code):
@@ -105,8 +111,9 @@ class Lexer:
         return f"{code}\n{trace}\n"
 
     def _set_new_line(self) -> bool:
+        assert self._code_gen is not None
         try:
-            self._code: str = next(self._code_gen)
+            self._code = next(self._code_gen)
         except StopIteration:
             # no more code - exit
             return False
@@ -118,12 +125,15 @@ class Lexer:
 
         return True
 
-    def get_next_token(self) -> Generator[None, None, PreprocessorToken]:
+    def get_next_token(self) -> Generator[PreprocessorToken, None, None]:
         if self._code_gen is None:
             self.error(msg="code reader not set")
 
+        if self._reader_obj is None:
+            self.error(msg="nothing to read")
+
         self._set_new_line()
-        self._code: str
+        # self._code: str
 
         while self._pos < len(self._code):
 
@@ -143,10 +153,7 @@ class Lexer:
                         yield self._parse_symbol(self._code)
 
                     elif self._code[self._pos] in ("'", '"'):
-                        yield self._parse_as_literal(
-                            self._code,
-                            self._code[self._pos]
-                            )
+                        yield self._parse_as_literal(self._code, self._code[self._pos])
 
                     elif self._code[self._pos] in (" ", "\t"):
                         self._pos += 1
@@ -188,7 +195,7 @@ class Lexer:
                         # shift pos forward for valid trace message
                         self._pos = pos
                         self.error(
-                                msg=f"unsupported macro symbol '{symb}'\n\n"
+                            msg=f"unsupported macro symbol '{symb}'\n\n"
                             f"{self.get_trace(trace_token)}"
                         )
 
@@ -206,7 +213,22 @@ class Lexer:
                         # shift pos forward for valid trace message
                         self._pos = pos
                         self.error(
-                                msg=f"unsupported macro symbol '{symb}'\n\n"
+                            msg=f"unsupported macro symbol '{symb}'\n\n"
+                            f"{self.get_trace(trace_token)}"
+                        )
+
+                    # found unexpected symbol for macro directive
+                    else:
+                        trace_token = PreprocessorToken(
+                            self._code[self._pos],
+                            TokenType.SYMBOL,
+                            1,
+                            code_line=self._line_pos,
+                            file_name=self._reader_obj.name,
+                        )
+                        symb = self._code[self._pos]
+                        self.error(
+                            msg=f"macro syntax error '{symb}'\n\n"
                             f"{self.get_trace(trace_token)}"
                         )
 
@@ -244,22 +266,22 @@ class Lexer:
             numeric = "".join(symbols)
             t = PreprocessorToken(
                 numeric,
-                    TokenType.NUMERIC,
+                TokenType.NUMERIC,
                 len(numeric),
                 code_line=self._line_pos,
-                file_name=self._reader_obj.name,
+                file_name=self._reader_obj.name,  # type: ignore
             )
             self.error(
-                    msg=f"not numerical symbol " f"'{numeric[-1]}'\n\n{self.get_trace(t)}"
+                msg=f"not numerical symbol " f"'{numeric[-1]}'\n\n{self.get_trace(t)}"
             )
 
         numeric = "".join(symbols)
         return PreprocessorToken(
             numeric,
-                TokenType.NUMERIC,
+            TokenType.NUMERIC,
             len(numeric),
-            code_line=self._line_pos,
-            file_name=self._reader_obj.name,
+            code_line=self._line_pos, 
+            file_name=self._reader_obj.name,  # type: ignore  # it`s an internal method, so we have check all values
         )
 
     def _parse_symbol(self, code: str) -> PreprocessorToken:
@@ -282,7 +304,7 @@ class Lexer:
                 TokenType.SYMBOL,
                 len(symbol),
                 code_line=self._line_pos,
-                file_name=self._reader_obj.name,
+                file_name=self._reader_obj.name,  # type: ignore
             )
 
         return token
@@ -300,10 +322,10 @@ class Lexer:
         token_value = "".join(p_symbols)
         return PreprocessorToken(
             token_value,
-                TokenType.LITERAL,
+            TokenType.LITERAL,
             len(token_value),
             code_line=self._line_pos,
-            file_name=self._reader_obj.name,
+            file_name=self._reader_obj.name,  # type: ignore
         )
 
     def error(self, *, msg: str = "") -> NoReturn:
@@ -330,7 +352,7 @@ class Lexer:
 class Loader:
     """Loader used in 'upload' directive to load files"""
 
-    def load(self, f_name: str, *, mode: str = "r", encoding: str = "utf-8") -> str:
+    def load(self, f_name: str | pathlib.Path, *, mode: str = "r", encoding: str = "utf-8") -> str:
         with open(f_name, mode=mode, encoding=encoding) as file:
             return file.read()
 
@@ -347,10 +369,10 @@ class Directive:
 class DefineDirective(Directive):
 
     def __init__(
-            self,
-            token: PreprocessorToken,
-            *,
-            value: Any | None = None,
+        self,
+        token: PreprocessorToken,
+        *,
+        value: Any | None = None,
     ) -> None:
         self.token = token
         self.sym_name: str = token.value
@@ -361,9 +383,9 @@ class DefineDirective(Directive):
 class UploadDirective(Directive):
 
     def __init__(
-            self,
-            token: PreprocessorToken,
-            path: str | pathlib.Path,
+        self,
+        token: PreprocessorToken,
+        path: str | pathlib.Path,
     ) -> None:
         self.token = token
         self.sym_name: str = token.value
@@ -381,7 +403,7 @@ class Declaration:
         return f"{type(self).__name__}(name={self.name}, value={self.value})"
 
 
-class Preprocessor:
+class PreprocessorParser:
     """this implementation preprocessor joined with parser"""
 
     def __init__(self, lexer: Lexer, reader: CodeReader) -> None:
@@ -409,7 +431,7 @@ class Preprocessor:
             self._token = next(self._token_gen)
             return
         self.error(
-                msg=f"unexpected symbol '{self._token.value}'\n\n"
+            msg=f"unexpected symbol '{self._token.value}'\n\n"
             f"{self._lexer.get_trace(self._token)}"
         )
 
@@ -423,9 +445,9 @@ class Preprocessor:
 
     def clear(self) -> None:
         """clear all preprocessed context"""
-        self._scope = None
+        self._scope = []
 
-    def preprocess(self) -> list[Directive]:
+    def parse(self) -> list[Directive]:
         """Provide all parsed directives for preprocessor"""
         self.directive()
         return self._scope
@@ -448,7 +470,7 @@ class Preprocessor:
 
             else:
                 self.error(
-                        msg=f"unexpected symbol '{self._token.value}'\n\n"
+                    msg=f"unexpected symbol '{self._token.value}'\n\n"
                     f"{self._lexer.get_trace(self._token)}"
                 )
 
@@ -481,12 +503,6 @@ class Preprocessor:
         self._scope.append(DefineDirective(symbol, value=value))
         return self._token
 
-    def _get_code_line(self, line_no: int) -> str:
-        try:
-            return self._reader.get_code_line(line_no)
-        except IndexError:
-            self.error(msg=f"line {line_no} not found\n")
-
     def literal(self) -> PreprocessorToken:
         """process param"""
         token = self._token
@@ -516,17 +532,39 @@ class NodeVisitor:
         raise PreprocessorError(f"unexpected directive {type(node).__name__}")
 
 
-class TextProcessor(NodeVisitor):
+class ScanState(StrEnum):
+    CODE = "code"
+    COMMENT = "comment"
+    STRING = "string"
+
+
+class grabber:
+    """adhoc instance for bind marco symbols with vars by names"""
+
+    @staticmethod
+    def grab_symbol_from_code_line(code: str) -> str:
+        pos = 0
+        symbol = []
+
+        while pos < len(code) and code[pos] != ":":
+            if code[pos].isalnum() or code[pos] == "_":
+                symbol.append(code[pos])
+            pos += 1
+
+        return "".join(symbol)
+
+
+class Preprocessor(NodeVisitor):
 
     def __init__(
-            self,
-            preprocessor: Preprocessor,
-            reader: CodeReader,
-            loader: Loader,
-            *,
-            repr_only: bool = False,
+        self,
+        parser: PreprocessorParser,
+        reader: CodeReader,
+        loader: Loader,
+        *,
+        repr_only: bool = False,
     ) -> None:
-        self._preproc = preprocessor
+        self._parser = parser
         self._loader = loader
         self._reader = reader
 
@@ -536,14 +574,27 @@ class TextProcessor(NodeVisitor):
         # flags
         self._repr_only: bool = repr_only
 
+        # list of registered macro symbols with
+        # bounded values
+        self._macro_symbols: dict[str, orgnode] = {}
+        self._node_pointers: dict[str, weakref.ref[orgnode]] = {}
+        self._state_stack: deque[ScanState] = deque()
+        self._state_stack.append(ScanState.CODE)
+
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"
+
+    def get_macro_symbols_pointers(self) -> dict[str, weakref.ref[orgnode]]:
+        return self._node_pointers
+
+    def get_macro_symbols_roots(self) -> list[orgnode]:
+        return list(self._macro_symbols.values())
 
     def error(self, *, msg: str = "") -> NoReturn:
         raise PreprocessorError(msg)
 
     def process(self) -> None:
-        self.process_directives(self._preproc.preprocess())
+        self.process_directives(self._parser.parse())
         self.make_all_substitutions()
 
     @staticmethod
@@ -571,26 +622,65 @@ class TextProcessor(NodeVisitor):
                 pos = 0
                 continue
 
-            value: Declaration = self._stree.resolve(code_line[pos])
-            if value is not None:
+            # switch state if we are inside a string or comment
+            self.switch_state(code_line, pos)
+
+            # get Declaration from stree
+            value = self._stree.resolve(code_line[pos])
+            if value is not None and code_line[pos + 1] != "_":
 
                 # ndef value not allowed to use as substitution
                 if isinstance(value.value, ndef):
-                    self.error(
-                            msg=f"symbol '{value.name}' have no value to substitute"
-                    )
+                    self.error(msg=f"symbol '{value.name}' have no value to substitute")
 
-                self.substitute(line_pos, code_line, pos, value)
+                macro_symbol = self._macro_symbols.get(value.name)
+                if macro_symbol is None:
+                    self.error(msg=f"symbol '{value.name}' not registered as macro")
+
+                # 1. parse code line -> fetch var name
+                var_symbol = grabber.grab_symbol_from_code_line(code_line)
+                if var_symbol not in self._node_pointers:
+                    self._node_pointers[var_symbol] = macro_symbol.add(var_symbol, "-")
+
+                # we have to update code line and ptr position after substitution
+                code_line, pos = self.substitute(line_pos, code_line, pos, value)
 
             pos += 1
             if pos >= len(code_line):
                 line_pos, code_line = self._next_line(code)
                 pos = 0
 
+    def switch_state(self, code_line: str, pos: int) -> None:
+        state = self._state_stack.popleft()
+        if code_line[pos] == "/" and state == ScanState.CODE:
+            self._state_stack.appendleft(ScanState.COMMENT)
+            return
+
+        elif code_line[pos] == "/" and state == ScanState.COMMENT:
+            self._state_stack.appendleft(ScanState.CODE)
+            return
+
+        elif (code_line[pos] == "'" or code_line[pos] == '"') and (
+            state == ScanState.CODE or state == ScanState.COMMENT
+        ):
+            self._state_stack.appendleft(state)
+            self._state_stack.appendleft(ScanState.STRING)
+            return
+
+        elif (
+            code_line[pos] == "'" or code_line[pos] == '"'
+        ) and state == ScanState.STRING:
+            return
+
+        self._state_stack.appendleft(state)
+
     def visit_UploadDirective(self, node: UploadDirective) -> None:
         """upload required data and set symbol with value into stree"""
         value = self._loader.load(node.path)
         self._stree.add(node.sym_name, Declaration(node.sym_name, value))
+
+        # create symbol node with path to source file
+        self._macro_symbols[node.sym_name] = orgnode.create(node.sym_name, node.path)
         self.replace_as_an_empty_line(node.code_line_pos - 1)
 
     def visit_DefineDirective(self, node: DefineDirective) -> None:
@@ -599,6 +689,8 @@ class TextProcessor(NodeVisitor):
         if v is None:
             v = ndef()
         self._stree.add(node.sym_name, Declaration(node.sym_name, v))
+        # create symbol node
+        self._macro_symbols[node.sym_name] = orgnode.create(node.sym_name, v)
         self.replace_as_an_empty_line(node.code_line_pos - 1)
 
     def replace_as_an_empty_line(self, pos: int) -> None:
@@ -611,30 +703,44 @@ class TextProcessor(NodeVisitor):
         self._reader.replace(pos, "\n")
 
     def substitute(
-            self,
-            line_idx: int,
-            code: str,
-            pos: int,
-            d: Declaration
-    ) -> None:
+        self,
+        line_idx: int,
+        code: str,
+        pos: int,
+        d: Declaration,
+    ) -> tuple[str, int]:
+        """Make substitute for founded macro symbol name"""
+        state = self._state_stack.popleft()
+        if state == ScanState.COMMENT or state == ScanState.STRING:
+            self._state_stack.appendleft(state)
+            return code, pos
+
         to_pos = (pos + 1) - len(d.name)
+        from_pos = to_pos + len(d.name)
+
         self._reader.replace(
             line_idx,
-            self.replace_code_line(code[:to_pos], d.value)
-            )
+            self.replace_code_line(
+                code[:to_pos],
+                d.value,
+                code[from_pos:],
+            ),
+        )
+        self._state_stack.appendleft(state)
+        return self._reader.get_code_line(line_idx), to_pos + len(d.value)
 
     @staticmethod
-    def replace_code_line(code: str, update: str) -> str:
-        return "".join([code, update, ";\n"])
+    def replace_code_line(code: str, update: str, tail: str) -> str:
+        return "".join([code, update, tail])
 
     def dump(self, fullpath: str) -> None:
         self._reader.dump(fullpath)
 
 
-def make_processor(code_reader: CodeReader) -> TextProcessor:
+def make_preprocessor(code_reader: CodeReader) -> Preprocessor:
     """Preprocessor instance factory"""
 
     loader = Loader()
     lexer = Lexer()
-    preproc = Preprocessor(lexer, code_reader)
-    return TextProcessor(preproc, code_reader, loader)
+    preproc = PreprocessorParser(lexer, code_reader)
+    return Preprocessor(preproc, code_reader, loader)

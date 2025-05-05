@@ -2,7 +2,7 @@ from abc import abstractmethod
 from typing import Any, Optional
 
 from src.exceptions import TranslatorRuntimeError
-from src.tokens import TranslatorToken, Token
+from src.tokens import Token, TranslatorToken
 
 
 class AstNode:
@@ -11,16 +11,13 @@ class AstNode:
         return f"{type(self).__name__}()"
 
     @property
-    # @abstractmethod
-    def node_type(self) -> TranslatorToken:
+    def node_type(self) -> TranslatorToken:  # type: ignore
         pass
 
     @property
-    # @abstractmethod
-    def name(self) -> str:
+    def name(self) -> str:  # type: ignore
         pass
 
-    # @abstractmethod
     def visit(self, visitor: Any) -> Any:
         pass
 
@@ -31,8 +28,8 @@ class Block(AstNode):
 
     def __init__(self, name: str) -> None:
         self._name = name
-        self._vars = []
-        self._directives = []
+        self._vars: list = []
+        self._directives: list = []
         self._blocks = []
 
     def add_variable(self, var: AstNode) -> None:
@@ -442,10 +439,12 @@ class Value(AstNode):
         self._unary = unary_token
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(val={self._token.value}, type={self._token.token_type})"
+        return f"{type(self).__name__}(val={self.value}, type={self._token.token_type})"
 
     @property
     def value(self) -> Any:
+        if self.negative:
+            return -self._token.value
         return self._token.value
 
     @property
@@ -457,7 +456,7 @@ class Value(AstNode):
         return self._unary is not None
 
     def visit(self, visitor: Any) -> Any:
-        visitor.numeric(self)
+        visitor.value(self)
 
 
 class ArrayValue(AstNode):
@@ -946,9 +945,12 @@ class DynamicVarName(AstNode):
         self._token = token
         self._name_ext = name_ext
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(base_name={self._base_name}, names_ext={self._name_ext})"
+
     @property
     def name(self) -> str:
-        return f"{self.__repr__()}{self._base_name}"
+        return self._base_name
 
     def get_name_extensions(self) -> list[AstNode]:
         return self._name_ext
@@ -1075,9 +1077,17 @@ class Range(AstNode):
     def min(self) -> Any:
         return self._min
 
+    @min.setter
+    def min(self, val: Any) -> None:
+        self._min = val
+
     @property
     def max(self) -> Any:
         return self._max
+
+    @max.setter
+    def max(self, val: Any) -> None:
+        self._max = val
 
     def visit(self, visitor: Any) -> Any:
         visitor.range(self)

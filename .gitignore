@@ -1,0 +1,36 @@
+# python artifacts
+__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+
+# IDE setup
+.vscode
+
+# public directories
+translators
+rvp_core_monitoring
+*scada*
+
+# private directories
+.ebnf
+.test-files
+
+# python environment
+edl-env
+
+# text and config files
+*.txt
+*.gz
+*.yml
+*.json
+
+# internal scripts
+scada_cfg_builder.py
+*scada*
+
+# EDL source files and code examples
+*.edl
+
+# exclude
+!setup.yml

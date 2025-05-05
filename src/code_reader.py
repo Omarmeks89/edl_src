@@ -27,7 +27,7 @@ class CodeReader:
         *,
         mode: str = "r",
         encoding: str = "utf-8",
-    ) -> Generator[None, None, str]:
+    ) -> Generator[str, None, None]:
         if len(self._cache) == 0:
             with open(self._f_name, mode=mode, encoding=encoding) as file:
                 for line in file.readlines():
@@ -55,9 +55,9 @@ class CodeReader:
         Raises:
             IndexError: on invalid index
         """
-        return self._lines[idx - 1]
+        return self._lines[idx]
 
-    def read_preprocessed(self) -> Generator[None, None, str]:
+    def read_preprocessed(self) -> Generator[str, None, None]:
         """get preprocessed text to parser from memory"""
         if len(self._lines) == 0:
             raise TranslatorError("no code lines found")

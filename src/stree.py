@@ -29,6 +29,7 @@ class _streeNode:
 
 
 class stree:
+    """symbol prefix tree responsible on resolve symbols into values"""
 
     def __init__(self) -> None:
         self.roots: dict[str, _streeNode] = {}
@@ -48,7 +49,9 @@ class stree:
         if val is None:
             raise PreprocessorError("None value not allowed for stree")
 
-        nodes, snode = self.roots, None | _streeNode
+        snode: _streeNode | None = None
+        nodes = self.roots
+
         for s in sym:
 
             if s in nodes:
@@ -59,6 +62,10 @@ class stree:
             snode = _streeNode(s)
             nodes[s] = snode
             nodes = snode.next
+
+        if snode is None:
+            # sth went wrong
+            raise PreprocessorError("node is not init")
 
         # anyway we got snode not None
         if snode.value is not None:
@@ -107,11 +114,5 @@ class stree:
 
         self.tmp = nodes[sym]
         val = self.tmp.value
-
-        if val is not None:
-            # stored value was found we have to
-            # drop tmp node to start from scratch
-            # for the next symbol
-            self.tmp = None
 
         return val

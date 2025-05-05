@@ -8,27 +8,27 @@ from src.stree import stree
 
 
 @pytest.mark.parametrize(
-        "symbol, l_symbol, value, result",
+    "symbol, l_symbol, value, result",
+    (
         (
-                (
-                        "data",
-                        "data",
-                        42,
-                        42,
-                ),
-                (
-                        "data",
-                        "dat",
-                        "-",
-                        None,
-                ),
+            "data",
+            "data",
+            42,
+            42,
         ),
+        (
+            "data",
+            "dat",
+            "-",
+            None,
+        ),
+    ),
 )
 def test_stree_handle_symbols(
-        symbol: str,
-        l_symbol: str,
-        value: Any,
-        result: Any | None,
+    symbol: str,
+    l_symbol: str,
+    value: Any,
+    result: Any | None,
 ) -> None:
     """No error handling here"""
     stree_ = stree()
@@ -39,27 +39,27 @@ def test_stree_handle_symbols(
 
 
 @pytest.mark.parametrize(
-        "symbol, l_symbol, value, result",
+    "symbol, l_symbol, value, result",
+    (
         (
-                (
-                        "data",
-                        "data",
-                        42,
-                        42,
-                ),
-                (
-                        "data",
-                        "da",
-                        42,
-                        None,
-                ),
+            "data",
+            "data",
+            42,
+            42,
         ),
+        (
+            "data",
+            "da",
+            42,
+            None,
+        ),
+    ),
 )
 def test_stree_find_value_step_by_step(
-        symbol: str,
-        l_symbol: str,
-        value: Any,
-        result: Any | None,
+    symbol: str,
+    l_symbol: str,
+    value: Any,
+    result: Any | None,
 ) -> None:
     stree_ = stree()
     stree_.add(symbol, value)
